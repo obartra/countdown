@@ -13,11 +13,15 @@ Specify the following URL parameters:
 - title
 - date
 - description
-- done-text
-- done-color
-- 
+- footer
+- complete
+- color
+- bgcolor
+- image
 
 `date` is required, all other fields are optional
+
+Visit [https://obartra.github.io/countdown/instructions](https://obartra.github.io/countdown/instructions) for more details.
 
 ## Dev
 
@@ -28,3 +32,7 @@ npm i
 sudo apt-get install jq  # For Ubuntu/Debian
 brew install jq          # For macOS
 ```
+
+Regenerate the list of icons with: `./scripts/copy.sh`. You can specify `--use-cache` to use a local copy when available.
+
+`npm run build` regenerates the instructions page based on the emoji content.

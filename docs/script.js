@@ -98,10 +98,13 @@ document.addEventListener("DOMContentLoaded", function () {
 
       let timeStr = "";
       if (t.years) timeStr += t.years + " years ";
-      if (t.days) timeStr += t.days + " days ";
-      if (t.hours) timeStr += t.hours + " hours ";
-      if (t.minutes) timeStr += t.minutes + " minutes ";
-      timeStr += t.seconds + " seconds";
+      if (t.years || t.days) timeStr += t.days + " days ";
+
+      const hourStr = `${t.hours || 0}`.padStart(2, "0");
+      const minuteStr = `${t.minutes || 0}`.padStart(2, "0");
+      const secondStr = `${t.seconds || 0}`.padStart(2, "0");
+
+      timeStr += `${hourStr}:${minuteStr}:${secondStr}`;
 
       display.innerHTML = timeStr;
       document.title = `${endtime ? endtime + " - " : ""} ${timeStr} remaining`;

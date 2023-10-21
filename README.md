@@ -1,5 +1,5 @@
 <p align="center">
-  <img width="160" height="160" src="/favicon.png">
+  <img width="160" height="160" src="/assets/favicon.png">
 </p>
 
 # ⏳ Countdown
@@ -22,6 +22,13 @@ Specify the following URL parameters:
 `date` is required, all other fields are optional
 
 Visit [https://obartra.github.io/countdown/instructions](https://obartra.github.io/countdown/instructions) for more details.
+
+
+## Samples
+
+![](./assets/sample.png)
+
+![](./assets/sample2.png)
 
 ## Dev
 

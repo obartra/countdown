@@ -1,0 +1,29 @@
+{
+  "name": "countdown",
+  "version": "1.0.0",
+  "description": "Simple, customizeable countdown without ads",
+  "main": "src/index.js",
+  "private": true,
+  "scripts": {
+    "start": "npx http-server docs",
+    "build": "node ./src/index.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/obartra/countdown.git"
+  },
+  "keywords": [
+    "countdown"
+  ],
+  "author": "Oscar Bartra",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/obartra/countdown/issues"
+  },
+  "homepage": "https://github.com/obartra/countdown#readme",
+  "dependencies": {
+    "handlebars": "^4.7.8",
+    "marked": "^9.1.2",
+    "openmoji": "^14.0.0"
+  }
+}

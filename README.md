@@ -10,19 +10,18 @@ Simple, customizeable countdown without ads
 
 Specify the following URL parameters:
 
+- time (required, ISO UTC like `2025-01-01T00:00:00Z`)
 - title
-- date
 - description
 - footer
 - complete
-- color
-- bgcolor
-- image
+- color (text color)
+- bgcolor (background color)
+- image (`provider:id`, e.g., `openverse:<uuid>` or `tenor:<id>`)
 
-`date` is required, all other fields are optional
+`time` is required; all other fields are optional.
 
 Visit [https://obartra.github.io/countdown/instructions](https://obartra.github.io/countdown/instructions) for more details.
-
 
 ## Samples
 
@@ -34,12 +33,12 @@ Visit [https://obartra.github.io/countdown/instructions](https://obartra.github.
 
 ### Setup
 
+Requires Node 25.2.x (see `.nvmrc`) and pnpm 10+.
+
 ```sh
-npm i
+pnpm install
 sudo apt-get install jq  # For Ubuntu/Debian
 brew install jq          # For macOS
 ```
 
-Regenerate the list of icons with: `./scripts/copy.sh`. You can specify `--use-cache` to use a local copy when available.
-
-`npm run build` regenerates the instructions page based on the emoji content.
+`pnpm build` bundles the React app into `docs/` (base `/countdown/` for GitHub Pages) and regenerates the instructions page based on the emoji content. `pnpm preview` serves the production build from `docs/`. For local dev, `pnpm start` runs the Vite dev server at `http://localhost:8080/`.

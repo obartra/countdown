@@ -1,0 +1,2 @@
+/api/openverse/*  /.netlify/functions/openverse-proxy/:splat  200
+/*                /index.html                                 200

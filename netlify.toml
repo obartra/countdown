@@ -1,10 +1,8 @@
 [functions]
   directory = "netlify/functions"
 
-[[redirects]]
-  from = "/api/openverse/*"
-  to = "/.netlify/functions/openverse-proxy/:splat"
-  status = 200
-
+[build]
+  publish = "dist"
+  
 [build.environment]
   SECRETS_SCAN_OMIT_KEYS = "VITE_TENOR_CLIENT_KEY,VITE_IMAGE_API_KEY_TENOR"

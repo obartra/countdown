@@ -1,0 +1,51 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --bs-gray-dark: #343a40;
+    --background: 0 0% 7%;
+    --foreground: 0 0% 100%;
+    --muted: 0 0% 15%;
+    --muted-foreground: 0 0% 70%;
+    --popover: 0 0% 12%;
+    --popover-foreground: 0 0% 98%;
+    --card: 0 0% 10%;
+    --card-foreground: 0 0% 98%;
+    --border: 0 0% 18%;
+    --input: 0 0% 18%;
+    --primary: 197 89% 52%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 0 0% 17%;
+    --secondary-foreground: 0 0% 98%;
+    --accent: 197 89% 52%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --ring: 197 89% 52%;
+    --radius: 0.75rem;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground min-h-screen antialiased;
+  }
+
+  #root {
+    min-height: 100%;
+  }
+}
+
+@layer components {
+  .header-icon {
+    @apply h-6 w-6 text-inherit;
+  }
+
+  .emoji-image {
+    @apply max-h-64 w-auto max-w-xs object-contain;
+  }
+}

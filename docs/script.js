@@ -34,7 +34,9 @@ function getRGBFromColorName(colorName) {
 
 document.addEventListener("DOMContentLoaded", function () {
   const urlParams = new URLSearchParams(window.location.search);
-  const endtime = urlParams.get("time");
+  const rawTimeParam = urlParams.get("time");
+  const rawDateAlias = urlParams.get("date");
+  const timeParam = rawTimeParam || rawDateAlias;
   const params = {
     title: urlParams.get("title"),
     description: urlParams.get("description"),
@@ -52,12 +54,6 @@ document.addEventListener("DOMContentLoaded", function () {
   } else if (!params.bgColor && !params.textColor) {
     params.bgColor = `var(--bs-gray-dark)`;
     params.textColor = "white";
-  }
-
-  if (!endtime) {
-    endtime = 0;
-    params.completeText = "No endtime parameter provided in the URL.";
-    console.error("No endtime parameter provided in the URL.");
   }
 
   const getRemainingTime = (endtime) => {
@@ -114,18 +110,6 @@ document.addEventListener("DOMContentLoaded", function () {
     const timeInterval = setInterval(updateClock, 1000);
   };
 
-  // Extract date, time, and timezone information
-  const endDate = new Date(endtime);
-  const userLocale = Intl.DateTimeFormat().resolvedOptions().locale;
-  const formattedDate = endDate.toLocaleDateString(userLocale, {
-    weekday: "long",
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
-  const userTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-
-  // Update message placeholder with extracted info
   const elements = {
     body: document.getElementsByTagName("body")[0],
     completeContainer: document.getElementById("complete-container"),
@@ -138,17 +122,96 @@ document.addEventListener("DOMContentLoaded", function () {
     footerContainer: document.getElementsByTagName("footer")[0],
     headerIcons: [...document.getElementsByClassName("header-icon")],
     image: document.getElementById("image"),
+    imageContainer: document.getElementById("image-container"),
     main: document.getElementsByTagName("main")[0],
+    timeHelper: document.getElementById("time-helper"),
+    helperForm: document.getElementById("time-helper-form"),
+    helperInput: document.getElementById("time-input"),
+    helperFeedback: document.getElementById("time-input-feedback"),
+    prefill24h: document.getElementById("prefill-24h"),
     title: document.getElementById("page-title"),
   };
 
+  const isValidFutureTime = (value) => {
+    if (!value) return false;
+    const parsed = Date.parse(value);
+    return !Number.isNaN(parsed) && parsed > Date.now();
+  };
+
+  const hideCountdownUI = () => {
+    elements.main.style.display = "none";
+    elements.imageContainer.style.display = "none";
+    elements.descriptionContainer.style.display = "none";
+    elements.completeContainer.style.display = "none";
+    elements.footerContainer.style.display = "none";
+  };
+
+  let helperHandlersAttached = false;
+  const attachHelperHandlers = () => {
+    if (helperHandlersAttached) return;
+    helperHandlersAttached = true;
+
+    const setFeedback = (message) => {
+      elements.helperFeedback.textContent = message;
+    };
+
+    elements.prefill24h.addEventListener("click", () => {
+      const next = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+      elements.helperInput.value = next;
+      setFeedback("");
+      elements.helperInput.focus();
+    });
+
+    elements.helperForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const value = elements.helperInput.value.trim();
+
+      if (!isValidFutureTime(value)) {
+        setFeedback(
+          "Enter a valid future time in ISO UTC, e.g., 2025-01-01T00:00:00Z."
+        );
+        return;
+      }
+
+      const nextParams = new URLSearchParams(window.location.search);
+      nextParams.set("time", value);
+      nextParams.delete("date");
+      window.location.search = nextParams.toString();
+    });
+  };
+
+  if (!isValidFutureTime(timeParam)) {
+    elements.timeHelper.classList.remove("d-none");
+    hideCountdownUI();
+    if (timeParam) {
+      elements.helperInput.value = timeParam;
+    }
+    attachHelperHandlers();
+    return;
+  }
+
+  elements.timeHelper.classList.add("d-none");
+
+  // Extract date, time, and timezone information
+  const endtime = new Date(timeParam).toISOString();
+  const endDate = new Date(endtime);
+  const userLocale = Intl.DateTimeFormat().resolvedOptions().locale;
+  const formattedDate = endDate.toLocaleDateString(userLocale, {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+  const userTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+  // Update message placeholder with extracted info
   elements.endDate.textContent = formattedDate;
   elements.endTZ.textContent = `${userTimeZone} time`;
 
   if (params.title) {
     elements.title.textContent = params.title;
   } else {
-    elements.style.display = "none";
+    elements.title.style.display = "none";
   }
 
   if (params.description) {
@@ -169,10 +232,10 @@ document.addEventListener("DOMContentLoaded", function () {
     icon.style.fill = params.textColor;
   });
 
-  if (params.image) {
-    elements.image.setAttribute("src", `./emojis/${params.image}.svg`);
-    elements.image.setAttribute("alt", params.image);
-  }
+  // Image rendering is handled by the React app with provider lookups; the static
+  // instructions page does not resolve external images. Hide the image container
+  // if an image param is present.
+  elements.imageContainer.style.display = "none";
 
   if (Date.now() > endDate.getTime()) {
     elements.footerContainer.style.display = "none";
@@ -181,6 +244,6 @@ document.addEventListener("DOMContentLoaded", function () {
     elements.completeText.textContent = params.completeText;
   } else {
     elements.completeContainer.style.display = "none";
-    initializeClock(endDate);
+    initializeClock(endtime);
   }
 });

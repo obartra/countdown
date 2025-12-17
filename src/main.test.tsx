@@ -26,6 +26,24 @@ afterEach(() => {
 });
 
 describe("Root lazy editor", () => {
+  it("canonicalizes the URL on initial load", async () => {
+    const future = "2030-01-01T00:00:00Z";
+    setSearch(
+      `/?date=${encodeURIComponent(future)}&complete=${encodeURIComponent("Time is up!")}&bgcolor=fff&foo=1&foo=2`,
+    );
+    setupRoot();
+    await act(async () => {
+      await import("./main");
+    });
+
+    const params = new URLSearchParams(window.location.search);
+    expect(params.get("time")).toBe(future);
+    expect(params.has("date")).toBe(false);
+    expect(params.has("complete")).toBe(false);
+    expect(params.get("bgcolor")).toBe("#ffffff");
+    expect(params.getAll("foo")).toEqual(["1", "2"]);
+  });
+
   it("shows the lazy editor (with fallback) when required params are missing", async () => {
     let resolveModule: ((value: unknown) => void) | undefined;
     vi.doMock("./EditPage", () => {

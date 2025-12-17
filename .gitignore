@@ -4,5 +4,6 @@
 .pnpm-store
 cypress/screenshots
 docs/assets
+dist
 node_modules
 tsconfig.node.tsbuildinfo

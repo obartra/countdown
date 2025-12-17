@@ -7,7 +7,7 @@ describe("required parameter editor", () => {
     cy.contains(/loading editor/i).should("be.visible");
     editor().should("be.visible");
     cy.contains("Time").should("be.visible");
-    countdown().should("not.exist");
+    countdown().should("not.be.visible");
   });
 
   it("starts countdown when time is provided", () => {

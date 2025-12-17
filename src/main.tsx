@@ -1,7 +1,8 @@
-import React, { lazy, Suspense } from "react";
+import React, { lazy, Suspense, useEffect, useMemo } from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
 import { deriveCountdownMeta, parseParamsFromSearch } from "./countdown";
+import { canonicalizeCountdownSearchParams } from "./countdownUrl";
 
 import "./style.css";
 
@@ -11,11 +12,30 @@ document.documentElement.classList.add("h-full");
 document.body.classList.add("min-h-screen", "antialiased");
 
 export const Root = () => {
-  const params = parseParamsFromSearch(window.location.search);
-  const { state } = deriveCountdownMeta(params);
+  const rawSearch = typeof window !== "undefined" ? window.location.search : "";
+  const canonicalSearchParams = useMemo(
+    () => canonicalizeCountdownSearchParams(rawSearch),
+    [rawSearch],
+  );
+  const canonicalSearchString = canonicalSearchParams.toString();
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const current = window.location.search.replace(/^\?/, "");
+    if (current === canonicalSearchString) return;
+    const url = new URL(window.location.href);
+    url.search = canonicalSearchString;
+    window.history.replaceState(null, "", url.toString());
+  }, [canonicalSearchString]);
+
+  const params = useMemo(
+    () => parseParamsFromSearch(canonicalSearchString),
+    [canonicalSearchString],
+  );
+  const { state } = useMemo(() => deriveCountdownMeta(params), [params]);
   const pathname =
     typeof window !== "undefined" ? window.location.pathname : "";
-  const search = new URLSearchParams(window.location.search);
+  const search = canonicalSearchParams;
   const forceEditFlag =
     typeof window !== "undefined" &&
     window.sessionStorage.getItem("forceEdit") === "1";

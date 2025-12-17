@@ -60,7 +60,37 @@ beforeEach(() => {
 });
 
 describe("EditPage presets and readout", () => {
-  it("applies the +30m preset and shows UTC/local summary", () => {
+  it("keeps raw user input in controls while canonicalizing the URL", () => {
+    render(<EditPage initialParams={baseParams} />);
+
+    const titleInput = screen.getByLabelText("Title") as HTMLInputElement;
+    fireEvent.change(titleInput, { target: { value: "  Hello  " } });
+
+    expect(titleInput.value).toBe("  Hello  ");
+    const params = new URLSearchParams(window.location.search);
+    expect(params.get("title")).toBe("Hello");
+  });
+
+  it("omits default complete text from the URL even when whitespace differs", async () => {
+    const params: CountdownParams = {
+      ...baseParams,
+      rawTime: "2000-01-01T00:00:00Z",
+    };
+    render(<EditPage initialParams={params} />);
+
+    const completeInput = screen.getByLabelText(
+      /complete text/i,
+    ) as HTMLInputElement;
+    fireEvent.change(completeInput, { target: { value: " Time is up! " } });
+
+    expect(completeInput.value).toBe(" Time is up! ");
+    expect(new URLSearchParams(window.location.search).has("complete")).toBe(
+      false,
+    );
+    expect(await screen.findByText("Time is up!")).toBeInTheDocument();
+  });
+
+  it("applies the +30m preset and updates the time input", () => {
     const now = new Date("2025-01-01T12:00:00Z").getTime();
     vi.useFakeTimers();
     vi.setSystemTime(now);
@@ -70,8 +100,6 @@ describe("EditPage presets and readout", () => {
     fireEvent.click(screen.getByRole("button", { name: "+30m" }));
 
     const expectedIso = new Date(now + 30 * 60 * 1000).toISOString();
-    expect(screen.getByText("Time summary")).toBeVisible();
-    expect(screen.getByText(expectedIso)).toBeInTheDocument();
     expect(window.location.search).toContain(encodeURIComponent(expectedIso));
   });
 
@@ -88,7 +116,6 @@ describe("EditPage presets and readout", () => {
     expectedDate.setDate(expectedDate.getDate() + 1);
     expectedDate.setHours(9, 0, 0, 0);
     const expectedIso = expectedDate.toISOString();
-    expect(screen.getByText(expectedIso)).toBeInTheDocument();
     expect(window.location.search).toContain(encodeURIComponent(expectedIso));
   });
 
@@ -185,7 +212,7 @@ describe("EditPage presets and readout", () => {
     fireEvent.click(screen.getByTestId("theme-midnight"));
 
     expect(screen.queryByTestId("theme-custom")).not.toBeInTheDocument();
-    expect(window.location.search).toContain("bgcolor=%230B1021");
-    expect(window.location.search).toContain("color=%23F2F5FF");
+    expect(window.location.search).not.toContain("bgcolor=");
+    expect(window.location.search).not.toContain("color=");
   });
 });

@@ -25,3 +25,10 @@
 - Click “24 hours from now” then submit → countdown appears with the generated time.
 - Visit `/?time=2030-01-01T00:00:00Z&title=Hi` → no helper, countdown shows with title preserved.
 - Visit `/?date=2030-01-01T00:00:00Z` → treated as valid (no helper) if alias supported; if invalid format, helper shows.
+
+### Acceptance criteria
+- [x] Helper shown only when `time`/`date` missing or invalid
+- [x] URL rebuilt preserving other params; countdown renders when valid
+- [x] Quick-fill 24h helper works
+- [x] Preview button shows countdown
+> **Status: Implemented** — This PR has been completed and merged.

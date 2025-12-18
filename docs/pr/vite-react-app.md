@@ -29,3 +29,10 @@
   - Open `/?time=2030-01-01T00:00:00Z&title=Hi` → countdown renders, title shows, form view hidden.
   - Open `/?date=2030-01-01T00:00:00Z` → treated as valid alias; helper stays hidden.
   - Open `/?bgcolor=000&image=1F389` → background/text colors stay legible via contrast inference; image loads.
+
+### Acceptance criteria
+- [x] React + Vite SPA replaces static page; query-driven behavior preserved
+- [x] Helper/countdown/complete states implemented in React
+- [x] Color inference, params, and instructions link retained
+- [x] Vite build/preview work under base path; e2e tests cover core flows
+> **Status: Implemented** — This PR has been completed and merged.

@@ -4,8 +4,10 @@
   "description": "Simple, customizeable countdown without ads",
   "private": true,
   "scripts": {
-    "start": "vite dev --host --port 8080",
-    "dev": "vite dev --host --port 8080",
+    "functions:serve": "node scripts/serve-functions.js",
+    "dev:with-functions": "concurrently --kill-others --success first \"pnpm dev\" \"pnpm functions:serve\"",
+    "start": "pnpm dev:with-functions",
+    "dev": "vite dev --host ${HOST:-127.0.0.1} --port ${PORT:-8080}",
     "preview": "vite preview --host --port 8080",
     "build": "vite build",
     "types": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json",
@@ -16,8 +18,8 @@
     "format:check": "prettier --check .",
     "cy:run": "cypress run",
     "cy:open": "cypress open",
-    "test:e2e": "VITE_IMAGE_API_KEY_TENOR=test VITE_TENOR_CLIENT_KEY=countdown start-server-and-test start http://localhost:8080 cy:run",
-    "test:e2e:open": "VITE_IMAGE_API_KEY_TENOR=test VITE_TENOR_CLIENT_KEY=countdown start-server-and-test start http://localhost:8080 cy:open"
+    "test:e2e": "PORT=4173 FUNCTIONS_PORT=8889 CYPRESS_BASE_URL=http://localhost:4173 VITE_IMAGE_API_KEY_TENOR=test VITE_TENOR_CLIENT_KEY=countdown start-server-and-test start http://localhost:4173 cy:run",
+    "test:e2e:open": "PORT=4173 FUNCTIONS_PORT=8889 CYPRESS_BASE_URL=http://localhost:4173 VITE_IMAGE_API_KEY_TENOR=test VITE_TENOR_CLIENT_KEY=countdown start-server-and-test start http://localhost:4173 cy:open"
   },
   "repository": {
     "type": "git",
@@ -55,6 +57,7 @@
     "@typescript-eslint/parser": "^8.13.0",
     "@vitejs/plugin-react-swc": "^3.7.1",
     "autoprefixer": "^10.4.20",
+    "concurrently": "^9.2.1",
     "cypress": "^13.6.4",
     "eslint": "^9.14.0",
     "eslint-config-prettier": "^9.1.0",
@@ -62,6 +65,7 @@
     "eslint-plugin-react-hooks": "^5.2.0",
     "http-server": "^14.1.1",
     "jsdom": "^24.1.0",
+    "netlify-cli": "^23.12.3",
     "postcss": "^8.4.47",
     "prettier": "^3.3.3",
     "start-server-and-test": "^2.0.2",

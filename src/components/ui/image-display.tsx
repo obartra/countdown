@@ -23,7 +23,6 @@ export const ImageDisplay = ({
     <section
       id="image-container"
       ref={imageContainerRef as React.RefObject<HTMLElement>}
-      style={{ display: showImage ? undefined : "none" }}
       className="flex flex-1 flex-col items-center justify-center"
     >
       {showImage ? (

@@ -31,6 +31,10 @@ type CountdownPreviewProps = {
   targetDate: Date | null;
   helperAlert?: HelperAlert;
   className?: string;
+  reportAction?: {
+    onClick: () => void;
+    label?: string;
+  };
 };
 
 const CountdownPreview = ({
@@ -40,6 +44,7 @@ const CountdownPreview = ({
   targetDate,
   helperAlert,
   className,
+  reportAction,
 }: CountdownPreviewProps) => {
   const [resolvedImage, setResolvedImage] = useState<ResolvedImage | null>(
     null,
@@ -194,26 +199,6 @@ const CountdownPreview = ({
     countdownParts.seconds,
   ]);
 
-  const attributionBackground = useMemo(() => {
-    const color = params.textColor;
-    const hex = color.startsWith("#") ? color.slice(1) : null;
-    if (hex && (hex.length === 6 || hex.length === 3)) {
-      const normalized =
-        hex.length === 3
-          ? hex
-              .split("")
-              .map((c) => c + c)
-              .join("")
-          : hex;
-      const r = parseInt(normalized.slice(0, 2), 16);
-      const g = parseInt(normalized.slice(2, 4), 16);
-      const b = parseInt(normalized.slice(4, 6), 16);
-      const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-      return luminance > 0.5 ? "rgba(0,0,0,0.15)" : "rgba(255,255,255,0.12)";
-    }
-    return "rgba(0,0,0,0.12)";
-  }, [params.textColor]);
-
   const helperAlertContent =
     showHelper && helperAlert ? (
       <Alert variant="warning" className="mx-auto max-w-xl text-left">
@@ -223,7 +208,10 @@ const CountdownPreview = ({
     ) : null;
 
   return (
-    <div ref={rootRef} className={cn("space-y-2", className)}>
+    <div
+      ref={rootRef}
+      className={cn("flex w-full flex-1 flex-col gap-4", className)}
+    >
       {helperAlertContent}
       <div
         className="space-y-2"
@@ -255,6 +243,12 @@ const CountdownPreview = ({
         </Card>
       </section>
 
+      <DescriptionBlock
+        show={showDescription}
+        description={params.description}
+        descriptionRef={descriptionRef}
+      />
+
       <ImageDisplay
         showImage={showImage}
         imageUrl={displayImageUrl}
@@ -265,19 +259,12 @@ const CountdownPreview = ({
         handleImageLoad={handleImageLoad}
       />
 
-      <DescriptionBlock
-        show={showDescription}
-        description={params.description}
-        descriptionRef={descriptionRef}
-      />
-
       <CountdownFooter
         showFooter={showFooter}
         footerText={params.footer}
         resolvedImage={resolvedImage}
-        attributionBackground={attributionBackground}
-        textColor={params.textColor}
         footerRef={footerRef}
+        reportAction={reportAction}
       />
     </div>
   );

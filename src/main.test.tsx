@@ -100,4 +100,108 @@ describe("Root lazy editor", () => {
 
     expect(await screen.findByTestId("editor")).toBeInTheDocument();
   });
+
+  it("does not flash the editor while loading a published slug", async () => {
+    vi.doMock("./EditPage", () => {
+      throw new Error("EditPage should not load while slug is resolving");
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => new Promise(() => {})),
+    );
+
+    setUrl("http://localhost/v/example-slug");
+    setupRoot();
+    await act(async () => {
+      await import("./main");
+    });
+
+    expect(
+      screen.getByText(/loading published countdown/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/loading editor/i)).not.toBeInTheDocument();
+  });
+
+  it("applies query overrides on top of a published slug payload", async () => {
+    vi.doMock("./EditPage", () => ({
+      __esModule: true,
+      default: () => <div data-testid="editor">Editor</div>,
+    }));
+    const payload = "time=2030-01-01T00:00:00Z&title=Base";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          slug: "example-slug",
+          payload,
+          meta: {
+            slug: "example-slug",
+            createdAt: Date.now(),
+            timeMs: Date.parse("2030-01-01T00:00:00Z"),
+            expiresAt: Date.now() + 1000,
+            published: true,
+            requiresPassword: false,
+          },
+        }),
+      })) as unknown as typeof fetch,
+    );
+
+    setUrl("http://localhost/v/example-slug?title=Override");
+    setupRoot();
+    await act(async () => {
+      await import("./main");
+    });
+
+    expect(await screen.findByText("Override")).toBeInTheDocument();
+  });
+
+  it("passes slug defaults into the editor while merging URL overrides", async () => {
+    vi.doMock("./EditPage", () => ({
+      __esModule: true,
+      default: ({
+        initialParams,
+        publishedDefaultsSearch,
+      }: {
+        initialParams: { rawTime?: string; title?: string };
+        publishedDefaultsSearch?: string;
+      }) => (
+        <div>
+          <div data-testid="editor-title">{initialParams.title}</div>
+          <div data-testid="editor-defaults">{publishedDefaultsSearch}</div>
+        </div>
+      ),
+    }));
+
+    const payload = "time=2030-01-01T00:00:00Z&title=Base";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          slug: "example-slug",
+          payload,
+          meta: {
+            slug: "example-slug",
+            createdAt: Date.now(),
+            timeMs: Date.parse("2030-01-01T00:00:00Z"),
+            expiresAt: Date.now() + 1000,
+            published: true,
+            requiresPassword: false,
+          },
+        }),
+      })) as unknown as typeof fetch,
+    );
+
+    setUrl("http://localhost/v/example-slug/edit?title=Override");
+    setupRoot();
+    await act(async () => {
+      await import("./main");
+    });
+
+    expect(await screen.findByTestId("editor-title")).toHaveTextContent(
+      "Override",
+    );
+    expect(screen.getByTestId("editor-defaults")).toHaveTextContent(payload);
+  });
 });

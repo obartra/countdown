@@ -5,41 +5,32 @@ type CountdownFooterProps = {
   showFooter: boolean;
   footerText?: string;
   resolvedImage: ResolvedImage | null;
-  attributionBackground: string;
-  textColor: string;
   footerRef: React.RefObject<HTMLElement | null>;
+  reportAction?: { onClick: () => void; label?: string };
 };
 
 export const CountdownFooter = ({
   showFooter,
   footerText,
   resolvedImage,
-  attributionBackground,
-  textColor,
   footerRef,
+  reportAction,
 }: CountdownFooterProps) => {
   const showAttribution = Boolean(resolvedImage?.attribution);
 
-  if (!showFooter && !showAttribution) return null;
+  if (!showFooter && !showAttribution && !reportAction) return null;
 
-  return (
-    <footer
-      className="mt-auto flex w-full flex-col gap-2 pt-4 text-sm text-muted-foreground"
-      ref={footerRef as React.RefObject<HTMLElement>}
-      style={{
-        color: textColor,
-      }}
-    >
-      {showAttribution ? (
-        <div
-          className="w-full text-left text-xs"
-          style={{
-            backgroundColor: attributionBackground,
-            maxHeight: 50,
-            padding: "0.5rem 0.75rem",
-            borderRadius: "0.375rem",
-          }}
-        >
+  const segments: Array<{ key: string; node: React.ReactNode }> = [];
+
+  if (showFooter && footerText) {
+    segments.push({ key: "footer", node: <span>{footerText}</span> });
+  }
+
+  if (showAttribution) {
+    segments.push({
+      key: "attribution",
+      node: (
+        <span className="text-xs">
           {resolvedImage?.attribution?.href ? (
             <a
               href={resolvedImage.attribution.href}
@@ -52,9 +43,41 @@ export const CountdownFooter = ({
           ) : (
             resolvedImage?.attribution?.text
           )}
-        </div>
+        </span>
+      ),
+    });
+  }
+
+  if (reportAction) {
+    segments.push({
+      key: "report",
+      node: (
+        <button
+          type="button"
+          onClick={reportAction.onClick}
+          className="text-xs font-semibold text-primary underline"
+        >
+          {reportAction.label ?? "Report this countdown"}
+        </button>
+      ),
+    });
+  }
+
+  return (
+    <footer
+      className="flex w-full flex-col gap-2 rounded-xl border border-border bg-card px-3 py-3 text-sm text-muted-foreground"
+      ref={footerRef as React.RefObject<HTMLElement>}
+    >
+      {segments.length > 0 ? (
+        <p id="page-footer" className="text-left">
+          {segments.map((segment, index) => (
+            <React.Fragment key={segment.key}>
+              {index > 0 ? <span> - </span> : null}
+              {segment.node}
+            </React.Fragment>
+          ))}
+        </p>
       ) : null}
-      {showFooter ? <p id="page-footer">{footerText}</p> : null}
     </footer>
   );
 };

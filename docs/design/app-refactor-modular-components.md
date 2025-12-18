@@ -4,21 +4,13 @@
 App.tsx has grown to own routing decisions (helper/countdown/complete), layout, image loading, attribution, timezone formatting, and color application. This proposal suggests splitting it into well‑named, focused components while keeping behavior and tests unchanged. Goal: improve readability and future edits without altering user‑visible behavior.
 
 ## Current State (evidence)
-- Single monolithic component `src/App.tsx` handles:
-  - Parsing params (via `parseParamsFromSearch`) and countdown state/meta (`deriveCountdownMeta`, `formatCountdown`, `dateFormatter`, `deriveColors`) from `src/countdown.ts`.
-  - Page styling (sets `document.body` colors) and image resolution/attribution via async calls to `resolveImage`/`parseImageId` (`src/imageResolver.ts`), with dynamic sizing logic measured via refs/useLayoutEffect.
-  - Conditional UI for helper, countdown grid, complete state, image/attribution, description, footer, and header nav. Uses Tailwind/shadcn primitives.
-- App tests assert helper visibility, countdown formatting, image attribution, and dynamic sizing (`src/App.test.tsx`).
-- The root decides viewer vs. editor based on params (`src/main.tsx`), lazy‑loading the editor.
-- Styles and tokens come from Tailwind/shadcn setup (`src/style.css`, `tailwind.config.js`); external image rendering uses provider:id.
+- Refactor complete: `src/App.tsx` uses `CountdownProvider` + `useCountdownViewModel`; UI split into components (`CountdownHeader`, `HelperForm`, `CountdownGrid`, `CountdownPreview`, `ReportModal`, etc.).
+- Image resolution/attribution handled via `resolveImage`/`imageResolver.ts` with sizing logic encapsulated in view model/hooks.
+- Root (`src/main.tsx`) lazy-loads `EditPage`; routing logic remains in Root.
+- Tailwind/shadcn tokens + theme CSS vars drive styling; tests cover helper visibility, countdown formatting, image attribution, and sizing.
 
 ## Proposed Direction (default)
-- Extract coherent subcomponents while keeping App responsible for orchestration/state and introducing a shared context:
-  - Components live alongside existing primitives in `src/components/ui/` (e.g., `HeaderNav`, `HelperForm`, `CountdownGrid`, `CompleteBanner`, `ImageDisplay`, `DescriptionSection`, `FooterSection`).
-  - Add a lightweight context (e.g., `CountdownContext`) to provide derived params/meta and shared callbacks instead of deep prop drilling.
-  - Factor the image max-height measurement into a dedicated hook (e.g., `useImageMaxHeight`) reused by the image display component.
-- Shared utilities stay in `src/countdown.ts` and `src/imageResolver.ts`; presentation moves into the extracted components.
-- Tests are the guardrail: DOM/ID/class changes are acceptable so long as all existing tests continue to pass.
+- Keep modular structure and shared context/hooks; ensure future changes preserve component boundaries and test coverage.
 
 ## Alternatives
 - Minimal extraction (only image + countdown grid) leaving header/helper inline (less churn, smaller win).

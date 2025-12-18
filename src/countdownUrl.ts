@@ -201,3 +201,89 @@ export const mergeCanonicalCountdownSearchParams = (
   for (const [key, value] of extras.entries()) merged.append(key, value);
   return merged;
 };
+
+const CANONICAL_COUNTDOWN_KEYS = [
+  "time",
+  "title",
+  "description",
+  "footer",
+  "complete",
+  "image",
+  "bgcolor",
+  "color",
+] as const;
+
+export const mergeCountdownSearchParamsWithOverrides = (
+  baseSearch: string,
+  overrideSearch: string,
+): URLSearchParams => {
+  const base = new URLSearchParams(baseSearch);
+  const overrides = new URLSearchParams(overrideSearch);
+
+  const merged = new URLSearchParams();
+
+  for (const key of CANONICAL_COUNTDOWN_KEYS) {
+    const baseValue =
+      key === "time" ? base.get("time") || base.get("date") : base.get(key);
+    if (baseValue != null) {
+      merged.set(key, baseValue);
+    }
+  }
+
+  const timeOverrideKey = overrides.has("time")
+    ? "time"
+    : overrides.has("date")
+      ? "date"
+      : null;
+
+  if (timeOverrideKey) {
+    merged.set("time", overrides.get(timeOverrideKey) ?? "");
+  }
+
+  for (const key of CANONICAL_COUNTDOWN_KEYS) {
+    if (key === "time") continue;
+    if (!overrides.has(key)) continue;
+    merged.set(key, overrides.get(key) ?? "");
+  }
+
+  for (const [key, value] of overrides.entries()) {
+    if (COUNTDOWN_QUERY_KEYS.has(key)) continue;
+    merged.append(key, value);
+  }
+
+  return merged;
+};
+
+export const buildOverrideCountdownSearchParams = (
+  baseSearch: string,
+  input: CountdownQueryInput,
+  existingSearch: string,
+): URLSearchParams => {
+  const base = new URLSearchParams(baseSearch);
+  const current = buildCanonicalCountdownSearchParams(input);
+
+  const overrides = new URLSearchParams();
+  for (const key of CANONICAL_COUNTDOWN_KEYS) {
+    const baseValue =
+      key === "time" ? base.get("time") || base.get("date") : base.get(key);
+    const currentValue = current.get(key);
+    if (baseValue === currentValue) continue;
+    if (currentValue == null) {
+      overrides.set(key, "");
+    } else {
+      overrides.set(key, currentValue);
+    }
+  }
+
+  const extras = new URLSearchParams();
+  const existing = new URLSearchParams(existingSearch);
+  for (const [key, value] of existing.entries()) {
+    if (COUNTDOWN_QUERY_KEYS.has(key)) continue;
+    extras.append(key, value);
+  }
+
+  const merged = new URLSearchParams();
+  for (const [key, value] of overrides.entries()) merged.append(key, value);
+  for (const [key, value] of extras.entries()) merged.append(key, value);
+  return merged;
+};

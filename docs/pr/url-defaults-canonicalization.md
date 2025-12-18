@@ -50,3 +50,9 @@ Links:
 - `pnpm lint`
 - `pnpm types`
 
+### Acceptance criteria
+- [x] Canonicalization removes defaults and normalizes colors (`time` only)
+- [x] URL rewritten on load and on editor changes
+- [x] Editor inputs preserve user-entered forms; preview renders canonical params
+- [x] Tests updated for canonical URL expectations
+> **Status: Implemented** — This PR has been completed and merged.

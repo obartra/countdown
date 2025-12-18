@@ -1,6 +1,8 @@
 import {
   buildCanonicalCountdownSearchParams,
+  buildOverrideCountdownSearchParams,
   canonicalizeCountdownSearchParams,
+  mergeCountdownSearchParamsWithOverrides,
 } from "./countdownUrl";
 
 describe("countdownUrl canonicalization", () => {
@@ -132,5 +134,49 @@ describe("countdownUrl canonicalization", () => {
     );
 
     expect(params.get("time")).toBe("2030-01-01T00:00:00Z");
+  });
+});
+
+describe("countdownUrl slug defaults", () => {
+  it("merges stored payload with URL overrides", () => {
+    const base = "time=2030-01-01T00:00:00Z&title=Base";
+    const merged = mergeCountdownSearchParamsWithOverrides(
+      base,
+      "?title=Override&edit=1",
+    );
+
+    expect(merged.get("time")).toBe("2030-01-01T00:00:00Z");
+    expect(merged.get("title")).toBe("Override");
+    expect(merged.get("edit")).toBe("1");
+  });
+
+  it("treats empty override values as explicit clears", () => {
+    const base = "time=2030-01-01T00:00:00Z&title=Base";
+    const merged = mergeCountdownSearchParamsWithOverrides(base, "?title=");
+
+    expect(merged.get("title")).toBe("");
+  });
+
+  it("builds override-only query params compared to stored payload", () => {
+    const base = "time=2030-01-01T00:00:00Z&title=Base";
+    const overrides = buildOverrideCountdownSearchParams(
+      base,
+      { time: "2030-01-01T00:00:00Z", title: "Base" },
+      "?edit=1",
+    );
+
+    expect(overrides.toString()).toBe("edit=1");
+  });
+
+  it("writes an empty key when clearing a stored value", () => {
+    const base = "time=2030-01-01T00:00:00Z&title=Base";
+    const overrides = buildOverrideCountdownSearchParams(
+      base,
+      { time: "2030-01-01T00:00:00Z", title: "" },
+      "",
+    );
+
+    expect(overrides.get("title")).toBe("");
+    expect(overrides.has("time")).toBe(false);
   });
 });

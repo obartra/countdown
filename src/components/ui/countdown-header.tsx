@@ -3,11 +3,18 @@ import React from "react";
 type CountdownHeaderProps = {
   title?: string;
   textColor: string;
+  publishedSlug?: string;
 };
 
-export const CountdownHeader = ({ title, textColor }: CountdownHeaderProps) => {
+export const CountdownHeader = ({
+  title,
+  textColor,
+  publishedSlug,
+}: CountdownHeaderProps) => {
   const search = typeof window !== "undefined" ? window.location.search : "";
-  const editHref = `${import.meta.env.BASE_URL}edit${search}`;
+  const editHref = publishedSlug
+    ? `${import.meta.env.BASE_URL}v/${publishedSlug}/edit`
+    : `${import.meta.env.BASE_URL}edit${search}`;
 
   const handleEditClick = () => {
     if (typeof window !== "undefined") {

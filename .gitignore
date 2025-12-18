@@ -1,6 +1,7 @@
 .cache
 .DS_Store
 .env
+.netlify
 .pnpm-store
 cypress/screenshots
 docs/assets

@@ -3,6 +3,9 @@ import { Button } from "./components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./components/ui/card";
 import { Input } from "./components/ui/input";
 import { Label } from "./components/ui/label";
+import { normalizeSlugInput } from "./lib/slug";
+import { formatRelativeExpiry } from "./lib/formatRelativeExpiry";
+import { createThemeCssVars, resolveThemeTokens } from "./lib/themeCssVars";
 import { Textarea } from "./components/ui/textarea";
 import ReactDatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
@@ -22,6 +25,7 @@ import { resolveImage } from "./imageResolver";
 import { searchOpenverse, searchTenor, type SearchResult } from "./imageSearch";
 import {
   buildCanonicalCountdownSearchParams,
+  buildOverrideCountdownSearchParams,
   mergeCanonicalCountdownSearchParams,
 } from "./countdownUrl";
 import { ShareLinkActions } from "./components/ShareLinkActions";
@@ -94,6 +98,23 @@ const timePresets: TimePreset[] = [
   },
 ];
 
+type PublishStatus = "idle" | "pending" | "success" | "error";
+type DeleteStatus = "idle" | "pending" | "success" | "error";
+
+type PublishResult = {
+  slug: string;
+  shortUrl: string;
+  longUrl: string;
+  expiresAt: number;
+  requiresPassword: boolean;
+};
+
+type PublishedEditContext = {
+  slug: string;
+  expiresAt?: number;
+  requiresPassword: boolean;
+};
+
 const buildShareUrl = (search: URLSearchParams) => {
   const url = new URL(import.meta.env.BASE_URL || "/", window.location.origin);
   url.search = search.toString();
@@ -102,6 +123,8 @@ const buildShareUrl = (search: URLSearchParams) => {
 
 type EditPageProps = {
   initialParams?: CountdownParams;
+  publishedContext?: PublishedEditContext | null;
+  publishedDefaultsSearch?: string;
 };
 
 const toLocalDate = (iso?: string): Date | null => {
@@ -111,7 +134,13 @@ const toLocalDate = (iso?: string): Date | null => {
   return new Date(parsed);
 };
 
-const EditPage = ({ initialParams }: EditPageProps) => {
+type OwnerUnlockStatus = "idle" | "pending" | "success" | "error";
+
+const EditPage = ({
+  initialParams,
+  publishedContext,
+  publishedDefaultsSearch,
+}: EditPageProps) => {
   const params = useMemo(
     () => initialParams ?? parseParamsFromSearch(window.location.search),
     [initialParams],
@@ -153,8 +182,33 @@ const EditPage = ({ initialParams }: EditPageProps) => {
   const [imageError, setImageError] = useState<string>("");
   const [isSearching, setIsSearching] = useState(false);
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string>("");
+  const [customSlugInput, setCustomSlugInput] = useState("");
+  const [publishPasswordInput, setPublishPasswordInput] = useState("");
+  const [publishStatus, setPublishStatus] = useState<PublishStatus>("idle");
+  const [publishMessage, setPublishMessage] = useState<string | null>(null);
+  const [publishResult, setPublishResult] = useState<PublishResult | null>(
+    null,
+  );
+  const [ownerPasswordInput, setOwnerPasswordInput] = useState("");
+  const [ownerUnlockStatus, setOwnerUnlockStatus] =
+    useState<OwnerUnlockStatus>("idle");
+  const [ownerUnlockMessage, setOwnerUnlockMessage] = useState<string | null>(
+    null,
+  );
+  const [isOwnerUnlocked, setIsOwnerUnlocked] = useState(false);
+  const [deleteConfirmInput, setDeleteConfirmInput] = useState("");
+  const [deleteStatus, setDeleteStatus] = useState<DeleteStatus>("idle");
+  const [deleteMessage, setDeleteMessage] = useState<string | null>(null);
+  const ownerPasswordRef = useRef<string | null>(null);
+  const [slugDefaultsSearch, setSlugDefaultsSearch] = useState<string | null>(
+    publishedDefaultsSearch ? publishedDefaultsSearch.replace(/^\?/, "") : null,
+  );
   const searchDebounceRef = useRef<number | undefined>();
   const previewCardRef = useRef<HTMLDivElement | null>(null);
+  const publishedSlugRef = useRef<string | null>(null);
+
+  const publishedSlug = publishedContext?.slug ?? null;
+  const publishedRequiresPassword = Boolean(publishedContext?.requiresPassword);
 
   const colors = useMemo(
     () => deriveColors(form.bgcolor || null, form.color || null),
@@ -180,10 +234,34 @@ const EditPage = ({ initialParams }: EditPageProps) => {
     [countdownQueryInput],
   );
   const canonicalCountdownSearch = canonicalCountdownSearchParams.toString();
+  const normalizedCustomSlug = customSlugInput
+    ? normalizeSlugInput(customSlugInput)
+    : null;
+  const slugValidationMessage =
+    customSlugInput && !normalizedCustomSlug
+      ? "Slugs must be 3-48 lowercase letters/numbers with optional single hyphens."
+      : null;
 
   const previewParams: CountdownParams = useMemo(
     () => parseParamsFromSearch(canonicalCountdownSearch),
     [canonicalCountdownSearch],
+  );
+  const previewThemeTokens = useMemo(
+    () =>
+      resolveThemeTokens({
+        backgroundColor: previewParams.backgroundColor,
+        textColor: previewParams.textColor,
+        themeKey: previewParams.themeKey,
+      }),
+    [
+      previewParams.backgroundColor,
+      previewParams.textColor,
+      previewParams.themeKey,
+    ],
+  );
+  const previewThemeVars = useMemo(
+    () => createThemeCssVars(previewThemeTokens),
+    [previewThemeTokens],
   );
 
   const { targetDate, state: metaState } = useMemo(
@@ -275,14 +353,19 @@ const EditPage = ({ initialParams }: EditPageProps) => {
     typeof window !== "undefined" ? window.location.search : "",
   );
 
-  const editorSearchParams = useMemo(
-    () =>
-      mergeCanonicalCountdownSearchParams(
-        initialSearchRef.current,
+  const editorSearchParams = useMemo(() => {
+    if (slugDefaultsSearch) {
+      return buildOverrideCountdownSearchParams(
+        slugDefaultsSearch,
         countdownQueryInput,
-      ),
-    [countdownQueryInput],
-  );
+        initialSearchRef.current,
+      );
+    }
+    return mergeCanonicalCountdownSearchParams(
+      initialSearchRef.current,
+      countdownQueryInput,
+    );
+  }, [countdownQueryInput, slugDefaultsSearch]);
   const editorSearchString = editorSearchParams.toString();
   const shareUrl = useMemo(
     () => buildShareUrl(canonicalCountdownSearchParams),
@@ -300,8 +383,274 @@ const EditPage = ({ initialParams }: EditPageProps) => {
     window.history.replaceState(null, "", url.toString());
   }, [editorSearchString]);
 
+  useEffect(() => {
+    if (!publishedDefaultsSearch) {
+      setSlugDefaultsSearch(null);
+      return;
+    }
+    setSlugDefaultsSearch(publishedDefaultsSearch.replace(/^\?/, ""));
+  }, [publishedDefaultsSearch]);
+
   const handleOpen = () => {
+    if (publishedSlug) {
+      window.location.href = new URL(
+        `${import.meta.env.BASE_URL}v/${publishedSlug}`,
+        window.location.origin,
+      ).toString();
+      return;
+    }
     window.location.href = shareUrl;
+  };
+
+  const safeParseJson = (value: string) => {
+    try {
+      return JSON.parse(value);
+    } catch {
+      return null;
+    }
+  };
+
+  useEffect(() => {
+    if (!publishedContext) return;
+    if (publishedSlugRef.current === publishedContext.slug) return;
+    publishedSlugRef.current = publishedContext.slug;
+
+    setCustomSlugInput(publishedContext.slug);
+    setPublishResult({
+      slug: publishedContext.slug,
+      shortUrl: new URL(
+        `${import.meta.env.BASE_URL}v/${publishedContext.slug}`,
+        window.location.origin,
+      ).toString(),
+      longUrl: "",
+      expiresAt: publishedContext.expiresAt ?? Date.now(),
+      requiresPassword: publishedContext.requiresPassword,
+    });
+    setPublishStatus("success");
+    setPublishMessage(null);
+    setDeleteStatus("idle");
+    setDeleteMessage(null);
+    setDeleteConfirmInput("");
+    setPublishPasswordInput("");
+    setOwnerPasswordInput("");
+    setOwnerUnlockStatus("idle");
+    setOwnerUnlockMessage(null);
+    setIsOwnerUnlocked(!publishedContext.requiresPassword);
+    ownerPasswordRef.current = null;
+  }, [publishedContext]);
+
+  const handleOwnerUnlock = async () => {
+    if (!publishedSlug) return;
+    if (!ownerPasswordInput.trim()) {
+      setOwnerUnlockStatus("error");
+      setOwnerUnlockMessage("Password required to unlock editing.");
+      return;
+    }
+
+    setOwnerUnlockStatus("pending");
+    setOwnerUnlockMessage(null);
+
+    try {
+      const response = await fetch(
+        `/api/published/${publishedSlug}?action=verify`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ password: ownerPasswordInput }),
+        },
+      );
+      const text = await response.text();
+      const parsed = safeParseJson(text) as { error?: string } | null;
+
+      if (!response.ok) {
+        setOwnerUnlockStatus("error");
+        setOwnerUnlockMessage(
+          parsed?.error ||
+            "Unable to unlock. Check your password and try again.",
+        );
+        return;
+      }
+
+      setOwnerUnlockStatus("success");
+      setOwnerUnlockMessage("Unlocked.");
+      setIsOwnerUnlocked(true);
+      setPublishPasswordInput(ownerPasswordInput);
+      ownerPasswordRef.current = ownerPasswordInput;
+    } catch (error) {
+      console.warn("Unlock failed", error);
+      setOwnerUnlockStatus("error");
+      setOwnerUnlockMessage("Unable to unlock. Try again.");
+    }
+  };
+
+  const handlePublish = async () => {
+    if (hasTimeError) {
+      setPublishStatus("error");
+      setPublishMessage("Enter a valid time before publishing.");
+      return;
+    }
+
+    const normalizedSlug = customSlugInput
+      ? normalizeSlugInput(customSlugInput)
+      : null;
+
+    if (customSlugInput && !normalizedSlug) {
+      setPublishStatus("error");
+      setPublishMessage(
+        "Slug must be 3-48 lowercase letters/numbers with optional hyphens.",
+      );
+      return;
+    }
+
+    const publishPassword =
+      normalizedSlug && publishedSlug && normalizedSlug === publishedSlug
+        ? publishPasswordInput || ownerPasswordRef.current
+        : publishPasswordInput;
+
+    if (normalizedSlug && !publishPassword) {
+      setPublishStatus("error");
+      setPublishMessage("Password required for a custom slug.");
+      return;
+    }
+
+    setPublishStatus("pending");
+    setPublishMessage(null);
+
+    const payload = {
+      canonicalSearch: canonicalCountdownSearch,
+      ...(normalizedSlug
+        ? { slug: normalizedSlug, password: publishPassword }
+        : {}),
+    };
+
+    try {
+      const response = await fetch("/publish", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+      const text = await response.text();
+      const parsed = safeParseJson(text) as {
+        slug?: string;
+        shortUrl?: string;
+        longUrl?: string;
+        expiresAt?: number;
+        error?: string;
+        message?: string;
+      } | null;
+
+      if (!response.ok) {
+        const message =
+          parsed?.error ||
+          parsed?.message ||
+          "Unable to publish the countdown.";
+        setPublishStatus("error");
+        setPublishMessage(message);
+        return;
+      }
+
+      if (!parsed?.slug || !parsed?.shortUrl) {
+        setPublishStatus("error");
+        setPublishMessage("Publish succeeded but the response was malformed.");
+        return;
+      }
+
+      const result: PublishResult = {
+        slug: parsed.slug,
+        shortUrl: new URL(
+          `${import.meta.env.BASE_URL}v/${parsed.slug}`,
+          window.location.origin,
+        ).toString(),
+        longUrl: parsed.longUrl ?? shareUrl,
+        expiresAt: parsed.expiresAt ?? Date.now(),
+        requiresPassword: Boolean(normalizedSlug),
+      };
+
+      if (normalizedSlug && publishPasswordInput) {
+        ownerPasswordRef.current = publishPasswordInput;
+      }
+
+      setPublishResult(result);
+      setPublishStatus("success");
+      setCustomSlugInput(result.slug);
+      setPublishPasswordInput("");
+      setDeleteConfirmInput("");
+      setDeleteStatus("idle");
+      setDeleteMessage(null);
+
+      if (publishedSlug && result.slug === publishedSlug) {
+        setSlugDefaultsSearch(canonicalCountdownSearch);
+      }
+    } catch (error) {
+      console.warn("Publish failed", error);
+      setPublishStatus("error");
+      setPublishMessage("Unable to publish the countdown. Try again.");
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!publishResult) return;
+    const confirmationMatches =
+      deleteConfirmInput.trim().toLowerCase() === publishResult.slug;
+
+    if (!confirmationMatches) {
+      setDeleteStatus("error");
+      setDeleteMessage("Type the slug to confirm deletion.");
+      return;
+    }
+
+    const password = publishResult.requiresPassword
+      ? ownerPasswordRef.current
+      : null;
+
+    if (publishResult.requiresPassword && !password) {
+      setDeleteStatus("error");
+      setDeleteMessage("Unlock with the owner password to delete this slug.");
+      return;
+    }
+
+    setDeleteStatus("pending");
+    setDeleteMessage(null);
+
+    const payload = publishResult.requiresPassword ? { password } : undefined;
+
+    try {
+      const response = await fetch(`/api/published/${publishResult.slug}`, {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload ?? {}),
+      });
+      const text = await response.text();
+      const parsed = safeParseJson(text) as {
+        error?: string;
+      } | null;
+
+      if (!response.ok) {
+        const message = parsed?.error || "Unable to delete the published slug.";
+        setDeleteStatus("error");
+        setDeleteMessage(message);
+        return;
+      }
+
+      setDeleteStatus("success");
+      setDeleteMessage("Published slug removed.");
+      setPublishResult(null);
+      setPublishStatus("idle");
+      setPublishMessage(null);
+      setCustomSlugInput("");
+      setPublishPasswordInput("");
+      setDeleteConfirmInput("");
+    } catch (error) {
+      console.warn("Delete slug failed", error);
+      setDeleteStatus("error");
+      setDeleteMessage("Unable to delete the published slug.");
+    }
   };
 
   const updateField =
@@ -472,6 +821,63 @@ const EditPage = ({ initialParams }: EditPageProps) => {
       }
     };
   }, [form.imageInput]);
+
+  const showOwnerGate =
+    publishedSlug && publishedRequiresPassword && !isOwnerUnlocked;
+
+  const deleteConfirmationMatches = publishResult
+    ? deleteConfirmInput.trim().toLowerCase() === publishResult.slug
+    : false;
+
+  if (showOwnerGate) {
+    return (
+      <div className="mx-auto flex min-h-screen w-full max-w-md flex-col justify-center px-4 py-6 text-left">
+        <Card>
+          <CardHeader>
+            <CardTitle>Owner access</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              This countdown is password-protected. Enter the password to edit
+              or delete it.
+            </p>
+          </CardHeader>
+          <CardContent>
+            <form
+              className="space-y-3"
+              onSubmit={(event) => {
+                event.preventDefault();
+                handleOwnerUnlock();
+              }}
+            >
+              <div className="space-y-2">
+                <Label htmlFor="owner-password">Password</Label>
+                <Input
+                  id="owner-password"
+                  type="password"
+                  placeholder="Enter owner password"
+                  value={ownerPasswordInput}
+                  onChange={(event) =>
+                    setOwnerPasswordInput(event.target.value)
+                  }
+                  disabled={ownerUnlockStatus === "pending"}
+                />
+              </div>
+              <Button
+                type="submit"
+                disabled={
+                  ownerUnlockStatus === "pending" || !ownerPasswordInput.trim()
+                }
+              >
+                {ownerUnlockStatus === "pending" ? "Checking…" : "Edit"}
+              </Button>
+              {ownerUnlockStatus === "error" && ownerUnlockMessage ? (
+                <p className="text-xs text-destructive">{ownerUnlockMessage}</p>
+              ) : null}
+            </form>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-8 px-4 py-6 text-left">
@@ -825,6 +1231,162 @@ const EditPage = ({ initialParams }: EditPageProps) => {
                 disabled={hasTimeError}
               />
             </section>
+            <section className="space-y-4 pt-4">
+              <div className="space-y-1">
+                <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Publish
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Save this countdown to a short-lived slug that you can share
+                  without the long query string.
+                </p>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <div className="flex flex-col gap-1">
+                  <Label
+                    htmlFor="publish-slug"
+                    className="text-xs font-semibold text-muted-foreground"
+                  >
+                    Slug (optional)
+                  </Label>
+                  <Input
+                    id="publish-slug"
+                    placeholder="Leave blank for generated slug"
+                    value={customSlugInput}
+                    onChange={(event) => setCustomSlugInput(event.target.value)}
+                    disabled={publishStatus === "pending"}
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <Label
+                    htmlFor="publish-password"
+                    className="text-xs font-semibold text-muted-foreground"
+                  >
+                    Password
+                  </Label>
+                  <Input
+                    id="publish-password"
+                    type="password"
+                    placeholder="Required for custom slug"
+                    value={publishPasswordInput}
+                    onChange={(event) =>
+                      setPublishPasswordInput(event.target.value)
+                    }
+                    disabled={publishStatus === "pending"}
+                  />
+                </div>
+              </div>
+              {slugValidationMessage ? (
+                <p className="text-xs text-destructive">
+                  {slugValidationMessage}
+                </p>
+              ) : null}
+              <div className="flex flex-wrap items-center gap-3">
+                <Button
+                  type="button"
+                  onClick={handlePublish}
+                  disabled={
+                    hasTimeError ||
+                    publishStatus === "pending" ||
+                    Boolean(slugValidationMessage) ||
+                    (customSlugInput &&
+                      !publishPasswordInput &&
+                      !(
+                        publishedSlug &&
+                        normalizedCustomSlug === publishedSlug &&
+                        ownerPasswordRef.current
+                      ))
+                  }
+                >
+                  {publishStatus === "pending"
+                    ? "Publishing…"
+                    : "Publish short URL"}
+                </Button>
+                {publishStatus === "success" && publishResult ? (
+                  <span className="text-xs text-muted-foreground">
+                    Published as{" "}
+                    <span className="font-semibold">{publishResult.slug}</span>.
+                  </span>
+                ) : null}
+              </div>
+              {publishStatus === "error" && publishMessage ? (
+                <p className="text-xs text-destructive">{publishMessage}</p>
+              ) : null}
+              {publishResult ? (
+                <div className="space-y-2 pt-2">
+                  <div>
+                    <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      Short link
+                    </div>
+                    <ShareLinkActions
+                      url={publishResult.shortUrl}
+                      disabled={false}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      {publishResult.requiresPassword
+                        ? formatRelativeExpiry(publishResult.expiresAt)
+                        : "Expires in 30 days"}
+                      {" · "}
+                      Expires on{" "}
+                      {new Date(publishResult.expiresAt).toLocaleDateString()}.
+                    </p>
+                  </div>
+                  <div className="rounded-lg border border-destructive/60 bg-destructive/10 p-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="text-xs font-semibold uppercase tracking-wide text-destructive">
+                          Danger zone
+                        </div>
+                        <p className="text-xs text-destructive">
+                          Deleting reclaims the slug immediately.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="mt-3 flex flex-col gap-1">
+                      <Label
+                        htmlFor="delete-confirm"
+                        className="text-xs font-semibold text-destructive"
+                      >
+                        Type slug to confirm
+                      </Label>
+                      <Input
+                        id="delete-confirm"
+                        placeholder={publishResult.slug}
+                        value={deleteConfirmInput}
+                        onChange={(event) =>
+                          setDeleteConfirmInput(event.target.value)
+                        }
+                        disabled={deleteStatus === "pending"}
+                      />
+                    </div>
+                    <div className="mt-3 flex flex-wrap items-center gap-3">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={handleDelete}
+                        disabled={
+                          deleteStatus === "pending" ||
+                          !deleteConfirmationMatches
+                        }
+                      >
+                        {deleteStatus === "pending"
+                          ? "Deleting…"
+                          : "Delete published slug"}
+                      </Button>
+                      {deleteStatus === "success" && deleteMessage ? (
+                        <p className="text-xs text-muted-foreground">
+                          {deleteMessage}
+                        </p>
+                      ) : deleteStatus === "error" && deleteMessage ? (
+                        <p className="text-xs text-destructive">
+                          {deleteMessage}
+                        </p>
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+            </section>
           </CardContent>
         </Card>
 
@@ -847,15 +1409,25 @@ const EditPage = ({ initialParams }: EditPageProps) => {
                   style={{
                     backgroundColor: previewParams.backgroundColor,
                     color: previewParams.textColor,
+                    ...previewThemeVars,
                   }}
                 >
+                  {previewParams.title ? (
+                    <h2
+                      data-testid="preview-title"
+                      className="mb-5 text-2xl font-semibold leading-tight"
+                    >
+                      {previewParams.title}
+                    </h2>
+                  ) : null}
                   <CountdownPreview
                     params={previewParams}
                     state={countdownState}
                     countdownDisplay={countdownDisplay}
                     targetDate={targetDate}
                     helperAlert={helperAlert}
-                    className="space-y-4 text-left"
+                    className="text-left"
+                    reportAction={{ onClick: () => {} }}
                   />
                 </div>
               </CardContent>
@@ -874,6 +1446,7 @@ const EditPage = ({ initialParams }: EditPageProps) => {
             aspectRatio: miniAspectRatio || 1,
             backgroundColor: previewParams.backgroundColor,
             color: previewParams.textColor,
+            ...previewThemeVars,
           }}
         >
           <div className="h-full w-full overflow-hidden">
@@ -889,7 +1462,8 @@ const EditPage = ({ initialParams }: EditPageProps) => {
                 countdownDisplay={countdownDisplay}
                 targetDate={targetDate}
                 helperAlert={helperAlert}
-                className="space-y-3 text-left"
+                className="gap-3 text-left"
+                reportAction={{ onClick: () => {} }}
               />
             </div>
           </div>

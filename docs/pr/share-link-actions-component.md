@@ -25,3 +25,9 @@
 - `pnpm types`
 - `pnpm test`
 - `pnpm lint`
+
+### Acceptance criteria
+- [x] ShareLinkActions component renders input + copy/view icon buttons in EditPage Share section
+- [x] Copy shows success/error state with tooltips; view navigates to share URL
+- [x] Disabled state respected; input remains readable
+> **Status: Implemented** — This PR has been completed and merged.

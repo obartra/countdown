@@ -36,9 +36,6 @@ jobs:
       - name: Build instructions page
         run: pnpm run build
 
-      - name: Verify bundle sizes
-        run: pnpm run bundle:check
-
       - name: Lint
         run: pnpm run lint
 

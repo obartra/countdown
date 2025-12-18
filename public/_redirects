@@ -1,13 +1,13 @@
-# Function routes rewritten to the serverless handlers -------------------------------------
+# Function routes rewritten to the serverless handlers -------------------------------
 # These ensure the browser POST/GET hits the Netlify Functions instead of a static 404.
-/publish                /.netlify/functions/publish                           200
-/admin-stats            /.netlify/functions/admin-stats                       200
-/api/admin/reports      /.netlify/functions/admin-reports                     200
-/api/admin/reports/:slug/.netlify/functions/admin-reports-slug?slug=:splat.   200
-/v/:slug/report         /.netlify/functions/report?slug=:splat                200
-/api/report/:slug       /.netlify/functions/report?slug=:splat                200
-/api/published/:slug    /.netlify/functions/published?slug=:splat             200
-/api/openverse/*        /.netlify/functions/openverse-proxy/:splat            200
+/publish                /.netlify/functions/publish                          200
+/admin-stats            /.netlify/functions/admin-stats                     200
+/api/admin/reports      /.netlify/functions/admin-reports                   200
+/api/admin/reports/:slug /.netlify/functions/admin-reports-slug?slug=:splat 200
+/v/:slug/report         /.netlify/functions/report?slug=:splat              200
+/api/report/:slug       /.netlify/functions/report?slug=:splat              200
+/api/published/:slug    /.netlify/functions/published?slug=:splat           200
+/api/openverse/*        /.netlify/functions/openverse-proxy/:splat         200
 
-# SPA fallback --------------------------------------------------------------------------------
-/*                      /index.html                                           200
+# SPA fallback ---------------------------------------------------------------------------
+/*                      /index.html                                          200

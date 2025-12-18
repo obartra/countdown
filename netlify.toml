@@ -1,6 +1,8 @@
 [functions]
   directory = "netlify/functions"
-  environment = { COUNTDOWN_STORAGE_DIR = "/tmp/.netlify/published-data" }
+
+[functions.environment]
+  COUNTDOWN_STORAGE_DIR = "/tmp/.netlify/published-data"
 
 [build]
   publish = "dist"

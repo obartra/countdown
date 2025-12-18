@@ -38,9 +38,12 @@ Publishing generates a short URL `/v/:slug` that can be viewed without loading t
 - `pnpm build` — Build app to `dist/`
 - `pnpm preview` — Preview production build
 - `pnpm test` — Unit/integration tests (Vitest)
+- `pnpm bundle:check` — Assert bundle size split (requires prior `pnpm build`)
 - `pnpm lint` — ESLint
 - `pnpm types` — Typecheck
 - `pnpm test:e2e` — Cypress against local dev + functions (requires available ports 4173/8889)
+
+CI runs `pnpm bundle:check` automatically after `pnpm build`.
 
 ## Environment
 

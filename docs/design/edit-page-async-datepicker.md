@@ -1,25 +1,21 @@
-# Async Editor + Friendly Date Picker (proposal)
+# Async Editor + Friendly Date Picker
 
 ## Summary
 We want the edit experience to be much friendlier—especially the date/time input—while avoiding a bundle cost hit for users who already have valid countdown URLs. The likely solution: lazy-load the editor (and any date picker library) only when required parameters are missing or when the user explicitly wants to edit, and swap the current `datetime-local` control for a popular, ergonomic picker that still emits a precise UTC timestamp. The goal is to improve UX without regressing load time for the default countdown view.
 
 ## Current State (evidence)
-- Routing: `src/main.tsx` preloads both `App` and `EditPage` and chooses which to render based on param validity (`state === "helper"` from `deriveCountdownMeta`). No dynamic import today.
-- Editor: `src/EditPage.tsx` uses a native `datetime-local` input plus inline UTC/local conversion, syncs query params via `history.replaceState`, and renders a live preview of the countdown. All logic lives in the main bundle.
-- Countdown logic: shared in `src/countdown.ts` (param parsing, color inference, countdown formatting/state).
-- Styling: Tailwind + shadcn primitives; no external date picker library in dependencies.
-- Tests: Cypress and RTL target main countdown behaviors; no coverage for lazy loading or third-party date picker interactions.
-- Build/deploy: Vite SPA, output to `docs/` with base `/countdown/`, no code splitting targeted for editor today.
+- Editor is lazy-loaded via `React.lazy`/`Suspense` in `src/main.tsx`; viewer bundle remains light.
+- Editor uses `react-datepicker` for friendly date/time selection, with UTC/local readout and query sync.
+- Countdown logic shared in `src/countdown.ts`; canonicalization in `src/countdownUrl.ts`.
+- Styling: Tailwind + shadcn primitives; datepicker scoped to editor chunk.
+- Tests: RTL + Cypress cover editor flows, including date input and lazy loading.
+- Build: Vite SPA, base `/`, Netlify functions for publish/report flows.
 
 ## Intent / Problem
 - Improve the date/time UX beyond native `datetime-local` (timezone clarity, presets, mobile friendliness).
 - Avoid penalizing default countdown load time with heavy date picker dependencies or editor UI when the URL is already valid.
 
-## Proposed Direction (default)
-- **Lazy-load the editor**: Convert the editor to a dynamic import via `React.lazy`/`Suspense`, loaded only when `deriveCountdownMeta` says the required params are missing or when an explicit “Edit” action is taken.
-- **Adopt a popular date picker**: Use a small, well-supported React date/time picker (e.g., `react-datepicker` or `@headlessui` + `react-day-picker`) that supports time selection, keyboard input, and clear UTC/local conversion. Keep the control isolated to the editor chunk.
-- **UTC handling**: Keep the existing conversion pipeline—editor captures local time, shows both local and computed UTC, and writes ISO UTC to the query params.
-- **Bundle impact**: Ensure the picker and editor live in a separate chunk; default countdown path continues to load only the viewer bundle.
+- Keep the current setup: lazy editor chunk with `react-datepicker`, UTC/local handling, and canonical URL output. Monitor bundle size if picker is swapped in the future.
 
 ## Alternatives (brief)
 - **Keep native input, add presets**: Simpler UX tweaks (preset buttons, better messaging) without third-party deps; lower bundle impact but less polished picker experience.

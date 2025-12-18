@@ -1,16 +1,14 @@
-# External Image Search for Countdown (proposal)
+# External Image Search for Countdown
 
 ## Summary
-Replace the legacy `/emojis/{name}.svg` flow with a simple search-and-select experience in the editor backed by an external image API. Users can search, preview, and attach an image; the viewer renders the chosen asset. If an SVG-first API is not feasible, fall back to a GIF/animated source (e.g., Tenor). URLs remain the contract (store the image URL or ID), and README/instructions stay consistent with the shipped behavior.
+Implemented: editor image search uses Openverse (static/SVG) and Tenor (stickers) with `provider:id` values stored in the `image` param. Viewer resolves and renders provider assets with attribution.
 
 ## Current State (evidence)
-- Image param is a freeform `image` string; the viewer/editor assume local SVGs at `/emojis/{name}.svg`:
-  - Viewer loads `src` as `${import.meta.env.BASE_URL}emojis/${params.image}.svg` (`src/App.tsx`).
-  - Editor preview uses the same path (`src/EditPage.tsx`).
-  - Static instructions script expects `./emojis/{name}.svg` if `image` is set (`docs/script.js`).
-- Build/dev middleware serves `/emojis` from `docs/emojis` (`vite.config.ts`), but that folder is absent in the repo (no assets to render).
-- README and `src/template.html` document `image` as an emoji name from the (missing) list.
-- Architecture: Vite SPA, lazy-loaded editor, no routing; deploy base `/countdown/` (`vite.config.ts`). Network access is restricted in the current harness, so external API calls will need explicit allowance/keys from the user.
+- Param format: `image=provider:id` with allowlist `openverse` (UUID) and `tenor` (id). Validation and resolution live in `src/imageResolver.ts`.  
+- Viewer resolution: fetch provider detail (Openverse/Tenor) and render resolved URL; Tenor attribution rendered (“Powered by Tenor”).  
+- Editor search UI: `src/EditPage.tsx` integrates Openverse + Tenor search (pagination/load more/clear) and writes `provider:id` to URL; manual input still allowed.  
+- Env/config: `VITE_IMAGE_API_KEY_TENOR` required; optional `VITE_OPENVERSE_BASE`. Requests are client-side; Tenor base configurable.  
+- Docs/template: README and `src/template.html` describe provider:id contract.
 
 ## Proposed Direction (default)
 - Use an external image provider with a JSON search API. Preferred: SVG/illustration catalog; fallback: Tenor/Giphy (GIF/WebP) if SVG is weak. Store the selected asset as `provider:id` in the `image` query param; render from the resolved provider URL.
@@ -38,16 +36,15 @@ Replace the legacy `/emojis/{name}.svg` flow with a simple search-and-select exp
 - Persistence: Provider changes or expired URLs could break old links; prefer stable URLs/IDs.
 
 ## Decisions
-- Provider: Prefer a free SVG search API; if not feasible, use Tenor/Giphy. Licensing must allow non-commercial use; if attribution is required, display a small footnote when rendering provider assets.
-- Animation: GIFs/WebP/animated assets are fine.
-- Param format: Only `provider:id` from a limited allowlist; validate ID format per provider when possible.
-- Caching: Client-only search; no server cache/infra.
-- Size constraints: Enforce max width/height on rendered images to prevent scrollbars; otherwise user-controlled.
-- Keys: Use a gitignored `.env` (e.g., `VITE_IMAGE_API_KEY`); deploy via env injection (e.g., Netlify). Client-side keys are acceptable; a serverless proxy is optional.
+- Provider allowlist locked to `openverse` and `tenor`; IDs validated per provider.
+- Param format remains `provider:id`; resolution + attribution handled client-side.
+- Client-only search/resolution; no server cache.
+- Enforce max width/height; animated assets allowed.
+- Keys: `VITE_IMAGE_API_KEY_TENOR` required; Openverse base configurable.
 
 ## Provider Selection (locked)
-- Static/SVG: **Openverse** API (e.g., `https://api.openverse.engineering/v1/images` with `q`, `extension=svg`, `license=pdm,cc0,by,by-sa,by-nd`). Provides attribution metadata; we must show a small footnote (≤50px) with title/creator/source in theme colors, lightly contrasted.
-- Animated/stickers: **Tenor** API (e.g., `https://g.tenor.com/v1/search` with `q`, `searchfilter=sticker` to favor sticker-style results; `contentfilter` optional toggle, default off; `media_filter` as needed). Requires API key; show a small “Powered by Tenor” attribution footnote.
+- Static/SVG: **Openverse** API (`https://api.openverse.engineering/v1/images` with `q`, `extension=svg`, `license=...`). Provides attribution metadata; we show a small footnote when provided.
+- Animated/stickers: **Tenor** API (`https://tenor.googleapis.com/v2/search` with `q`, `limit`, `pos`, `client_key=${VITE_TENOR_CLIENT_KEY || VITE_IMAGE_API_KEY_TENOR}`). Requires API key; “Powered by Tenor” attribution shown.
 - Param format: `provider:id` with allowlist (`openverse`, `tenor`) and ID validation per provider.
 - Keys: `VITE_IMAGE_API_KEY_OPENVERSE` (optional if needed) and `VITE_IMAGE_API_KEY_TENOR` in gitignored `.env`; deploy via env injection. Client-side is acceptable; proxy optional.
 
@@ -57,8 +54,8 @@ Replace the legacy `/emojis/{name}.svg` flow with a simple search-and-select exp
   - `openverse:<uuid>` where `<uuid>` is the Openverse image `id` (UUID v4 string). Validation: `/^[0-9a-fA-F-]{36}$/`.
   - `tenor:<id>` where `<id>` is the Tenor result `id` (alphanumeric); validation: `/^[A-Za-z0-9_-]+$/`.
 - Search endpoints:
-  - Openverse: `GET https://api.openverse.engineering/v1/images?q={query}&extension=svg&license=pdm,cc0,by,by-sa,by-nd&page={page}&page_size={n}`; key optional via `Authorization: Bearer <key>` if provided.
-  - Tenor: `GET https://g.tenor.com/v1/search?q={query}&searchfilter=sticker&limit={n}&pos={cursor}&key=${VITE_IMAGE_API_KEY_TENOR}` (optionally include `contentfilter=off|high` toggle and `media_filter` to trim payload).
+  - Openverse: `GET https://api.openverse.engineering/v1/images?q={query}&extension=svg&license=pdm,cc0,by,by-sa,by-nd&page={page}&page_size={n}`; key optional.
+  - Tenor: `GET https://tenor.googleapis.com/v2/search?q={query}&limit={n}&pos={cursor}&key=${VITE_IMAGE_API_KEY_TENOR}` (content filter high by default).
 - Resolution (rendering):
   - `openverse:id` → fetch metadata via Openverse detail endpoint (`/v1/images/{id}`) to obtain a direct URL; render that URL.
   - `tenor:id` → fetch detail endpoint (`https://g.tenor.com/v1/gifs?ids={id}&key=...`) to obtain `media_formats` and pick a preferred format (e.g., GIF/WebP/MP4). Cache result client-side per session.

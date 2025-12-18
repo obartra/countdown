@@ -1,24 +1,45 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Alert, AlertDescription, AlertTitle } from "./components/ui/alert";
 import { Button } from "./components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./components/ui/card";
 import { Input } from "./components/ui/input";
 import { Label } from "./components/ui/label";
+import { normalizeSlugInput } from "./lib/slug";
+import { formatRelativeExpiry } from "./lib/formatRelativeExpiry";
+import { createThemeCssVars, resolveThemeTokens } from "./lib/themeCssVars";
 import { Textarea } from "./components/ui/textarea";
 import ReactDatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
 import { DEFAULT_THEME_KEY, themeMap, themes } from "./themes";
 import {
+  CountdownDisplay,
   CountdownParams,
   CountdownState,
-  dateFormatter,
+  DEFAULT_COMPLETE_TEXT,
   deriveColors,
   deriveCountdownMeta,
   formatCountdown,
   parseParamsFromSearch,
 } from "./countdown";
+import CountdownPreview from "./components/CountdownPreview";
 import { resolveImage } from "./imageResolver";
 import { searchOpenverse, searchTenor, type SearchResult } from "./imageSearch";
+import {
+  buildCanonicalCountdownSearchParams,
+  buildOverrideCountdownSearchParams,
+  mergeCanonicalCountdownSearchParams,
+} from "./countdownUrl";
+import { ShareLinkActions } from "./components/ShareLinkActions";
+
+const defaultCountdownDisplay: CountdownDisplay = {
+  label: "",
+  totalMs: 0,
+  parts: {
+    days: 0,
+    hours: 0,
+    minutes: 0,
+    seconds: 0,
+  },
+};
 
 type EditorForm = {
   time: string;
@@ -77,23 +98,24 @@ const timePresets: TimePreset[] = [
   },
 ];
 
-const buildSearchParams = (form: EditorForm) => {
-  const search = new URLSearchParams();
-  if (form.time.trim()) search.set("time", form.time.trim());
-  if (form.title.trim()) search.set("title", form.title.trim());
-  if (form.description.trim())
-    search.set("description", form.description.trim());
-  if (form.footer.trim()) search.set("footer", form.footer.trim());
-  if (form.completeText.trim())
-    search.set("complete", form.completeText.trim());
-  if (form.image.trim()) search.set("image", form.image.trim());
-  if (form.bgcolor.trim()) search.set("bgcolor", form.bgcolor.trim());
-  if (form.color.trim()) search.set("color", form.color.trim());
-  return search;
+type PublishStatus = "idle" | "pending" | "success" | "error";
+type DeleteStatus = "idle" | "pending" | "success" | "error";
+
+type PublishResult = {
+  slug: string;
+  shortUrl: string;
+  longUrl: string;
+  expiresAt: number;
+  requiresPassword: boolean;
 };
 
-const buildShareUrl = (form: EditorForm) => {
-  const search = buildSearchParams(form);
+type PublishedEditContext = {
+  slug: string;
+  expiresAt?: number;
+  requiresPassword: boolean;
+};
+
+const buildShareUrl = (search: URLSearchParams) => {
   const url = new URL(import.meta.env.BASE_URL || "/", window.location.origin);
   url.search = search.toString();
   return url.toString();
@@ -101,6 +123,8 @@ const buildShareUrl = (form: EditorForm) => {
 
 type EditPageProps = {
   initialParams?: CountdownParams;
+  publishedContext?: PublishedEditContext | null;
+  publishedDefaultsSearch?: string;
 };
 
 const toLocalDate = (iso?: string): Date | null => {
@@ -110,7 +134,13 @@ const toLocalDate = (iso?: string): Date | null => {
   return new Date(parsed);
 };
 
-const EditPage = ({ initialParams }: EditPageProps) => {
+type OwnerUnlockStatus = "idle" | "pending" | "success" | "error";
+
+const EditPage = ({
+  initialParams,
+  publishedContext,
+  publishedDefaultsSearch,
+}: EditPageProps) => {
   const params = useMemo(
     () => initialParams ?? parseParamsFromSearch(window.location.search),
     [initialParams],
@@ -121,11 +151,10 @@ const EditPage = ({ initialParams }: EditPageProps) => {
     title: params.title || "",
     description: params.description || "",
     footer: params.footer || "",
-    completeText:
-      params.completeText === "Time is up!" ? "" : params.completeText || "",
+    completeText: params.completeText || DEFAULT_COMPLETE_TEXT,
     image: params.image || "",
-    bgcolor: params.backgroundColor || "",
-    color: params.textColor || "",
+    bgcolor: params.backgroundColorInput || "",
+    color: params.textColorInput || "",
     themeKey: params.isCustomTheme
       ? "custom"
       : params.themeKey || DEFAULT_THEME_KEY,
@@ -137,35 +166,103 @@ const EditPage = ({ initialParams }: EditPageProps) => {
 
   const [countdownState, setCountdownState] =
     useState<CountdownState>("helper");
-  const [countdownLabel, setCountdownLabel] = useState("");
-  const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "error">(
-    "idle",
+  const [countdownDisplay, setCountdownDisplay] = useState<CountdownDisplay>(
+    defaultCountdownDisplay,
   );
+  const [miniAspectRatio, setMiniAspectRatio] = useState(() => {
+    if (typeof window === "undefined" || window.innerHeight === 0) {
+      return 1;
+    }
+    return window.innerWidth / window.innerHeight;
+  });
+  const [showMiniPreview, setShowMiniPreview] = useState(false);
   const [imageResults, setImageResults] = useState<SearchResult[]>([]);
   const [nextOvPage, setNextOvPage] = useState<number | null>(null);
   const [nextTenorPos, setNextTenorPos] = useState<string | null>(null);
   const [imageError, setImageError] = useState<string>("");
   const [isSearching, setIsSearching] = useState(false);
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string>("");
+  const [customSlugInput, setCustomSlugInput] = useState("");
+  const [publishPasswordInput, setPublishPasswordInput] = useState("");
+  const [publishStatus, setPublishStatus] = useState<PublishStatus>("idle");
+  const [publishMessage, setPublishMessage] = useState<string | null>(null);
+  const [publishResult, setPublishResult] = useState<PublishResult | null>(
+    null,
+  );
+  const [ownerPasswordInput, setOwnerPasswordInput] = useState("");
+  const [ownerUnlockStatus, setOwnerUnlockStatus] =
+    useState<OwnerUnlockStatus>("idle");
+  const [ownerUnlockMessage, setOwnerUnlockMessage] = useState<string | null>(
+    null,
+  );
+  const [isOwnerUnlocked, setIsOwnerUnlocked] = useState(false);
+  const [deleteConfirmInput, setDeleteConfirmInput] = useState("");
+  const [deleteStatus, setDeleteStatus] = useState<DeleteStatus>("idle");
+  const [deleteMessage, setDeleteMessage] = useState<string | null>(null);
+  const ownerPasswordRef = useRef<string | null>(null);
+  const [slugDefaultsSearch, setSlugDefaultsSearch] = useState<string | null>(
+    publishedDefaultsSearch ? publishedDefaultsSearch.replace(/^\?/, "") : null,
+  );
   const searchDebounceRef = useRef<number | undefined>();
+  const previewCardRef = useRef<HTMLDivElement | null>(null);
+  const publishedSlugRef = useRef<string | null>(null);
+
+  const publishedSlug = publishedContext?.slug ?? null;
+  const publishedRequiresPassword = Boolean(publishedContext?.requiresPassword);
 
   const colors = useMemo(
     () => deriveColors(form.bgcolor || null, form.color || null),
     [form.bgcolor, form.color],
   );
 
-  const previewParams: CountdownParams = {
-    rawTime: form.time,
-    title: form.title || undefined,
-    description: form.description || undefined,
-    footer: form.footer || undefined,
-    image: form.image || undefined,
-    completeText: form.completeText || "Time is up!",
-    backgroundColor: colors.backgroundColor,
-    textColor: colors.textColor,
-    themeKey: colors.themeKey,
-    isCustomTheme: colors.isCustomTheme,
-  };
+  const countdownQueryInput = useMemo(
+    () => ({
+      time: form.time,
+      title: form.title,
+      description: form.description,
+      footer: form.footer,
+      complete: form.completeText,
+      image: form.image,
+      bgcolor: form.bgcolor,
+      color: form.color,
+    }),
+    [form],
+  );
+
+  const canonicalCountdownSearchParams = useMemo(
+    () => buildCanonicalCountdownSearchParams(countdownQueryInput),
+    [countdownQueryInput],
+  );
+  const canonicalCountdownSearch = canonicalCountdownSearchParams.toString();
+  const normalizedCustomSlug = customSlugInput
+    ? normalizeSlugInput(customSlugInput)
+    : null;
+  const slugValidationMessage =
+    customSlugInput && !normalizedCustomSlug
+      ? "Slugs must be 3-48 lowercase letters/numbers with optional single hyphens."
+      : null;
+
+  const previewParams: CountdownParams = useMemo(
+    () => parseParamsFromSearch(canonicalCountdownSearch),
+    [canonicalCountdownSearch],
+  );
+  const previewThemeTokens = useMemo(
+    () =>
+      resolveThemeTokens({
+        backgroundColor: previewParams.backgroundColor,
+        textColor: previewParams.textColor,
+        themeKey: previewParams.themeKey,
+      }),
+    [
+      previewParams.backgroundColor,
+      previewParams.textColor,
+      previewParams.themeKey,
+    ],
+  );
+  const previewThemeVars = useMemo(
+    () => createThemeCssVars(previewThemeTokens),
+    [previewThemeTokens],
+  );
 
   const { targetDate, state: metaState } = useMemo(
     () => deriveCountdownMeta(previewParams),
@@ -174,11 +271,15 @@ const EditPage = ({ initialParams }: EditPageProps) => {
 
   useEffect(() => {
     setCountdownState(metaState);
-  }, [metaState]);
+    if (metaState === "countdown" && targetDate) {
+      setCountdownDisplay(formatCountdown(targetDate.getTime() - Date.now()));
+    } else {
+      setCountdownDisplay(defaultCountdownDisplay);
+    }
+  }, [canonicalCountdownSearch, metaState, targetDate]);
 
   useEffect(() => {
-    if (metaState !== "countdown" || !targetDate) {
-      setCountdownLabel("");
+    if (countdownState !== "countdown" || !targetDate) {
       return undefined;
     }
 
@@ -186,49 +287,55 @@ const EditPage = ({ initialParams }: EditPageProps) => {
       const remaining = targetDate.getTime() - Date.now();
       if (remaining <= 0) {
         setCountdownState("complete");
-        setCountdownLabel("");
+        setCountdownDisplay(defaultCountdownDisplay);
         return;
       }
-      setCountdownLabel(formatCountdown(remaining).label);
+      setCountdownDisplay(formatCountdown(remaining));
     };
 
     tick();
     const id = window.setInterval(tick, 1000);
     return () => window.clearInterval(id);
-  }, [metaState, targetDate]);
-
-  const endDateText = targetDate ? dateFormatter(targetDate) : "";
-  const timeZoneName = useMemo(
-    () => Intl.DateTimeFormat().resolvedOptions().timeZone,
-    [],
-  );
-  const localTimeFormatter = useMemo(
-    () =>
-      new Intl.DateTimeFormat(undefined, {
-        timeZone: timeZoneName,
-        weekday: "short",
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-        hour: "numeric",
-        minute: "2-digit",
-        timeZoneName: "short",
-      }),
-    [timeZoneName],
-  );
-  const hasTimeError = !localTimeInput;
-  const interpretedUtc = localTimeInput ? localTimeInput.toISOString() : "";
-  const interpretedLocal = localTimeInput
-    ? localTimeFormatter.format(localTimeInput)
-    : "";
+  }, [countdownState, targetDate]);
 
   useEffect(() => {
-    if (!form.image) {
+    if (typeof window === "undefined") return undefined;
+    const updateRatio = () => {
+      if (window.innerHeight === 0) {
+        setMiniAspectRatio(1);
+        return;
+      }
+      setMiniAspectRatio(window.innerWidth / window.innerHeight);
+    };
+    updateRatio();
+    window.addEventListener("resize", updateRatio);
+    return () => window.removeEventListener("resize", updateRatio);
+  }, []);
+
+  useEffect(() => {
+    const node = previewCardRef.current;
+    if (!node || typeof IntersectionObserver === "undefined") {
+      return undefined;
+    }
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setShowMiniPreview(!entry.isIntersecting);
+      },
+      { threshold: 0.05 },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+
+  const hasTimeError = !localTimeInput;
+
+  useEffect(() => {
+    if (!previewParams.image) {
       setImagePreviewUrl("");
       return;
     }
     let aborted = false;
-    resolveImage(form.image)
+    resolveImage(previewParams.image)
       .then((resolved) => {
         if (!aborted) {
           setImagePreviewUrl(resolved.url);
@@ -240,30 +347,310 @@ const EditPage = ({ initialParams }: EditPageProps) => {
     return () => {
       aborted = true;
     };
-  }, [form.image]);
+  }, [previewParams.image]);
 
-  const shareUrl = useMemo(() => buildShareUrl(form), [form]);
-  const searchParams = useMemo(() => buildSearchParams(form), [form]);
+  const initialSearchRef = useRef(
+    typeof window !== "undefined" ? window.location.search : "",
+  );
+
+  const editorSearchParams = useMemo(() => {
+    if (slugDefaultsSearch) {
+      return buildOverrideCountdownSearchParams(
+        slugDefaultsSearch,
+        countdownQueryInput,
+        initialSearchRef.current,
+      );
+    }
+    return mergeCanonicalCountdownSearchParams(
+      initialSearchRef.current,
+      countdownQueryInput,
+    );
+  }, [countdownQueryInput, slugDefaultsSearch]);
+  const editorSearchString = editorSearchParams.toString();
+  const shareUrl = useMemo(
+    () => buildShareUrl(canonicalCountdownSearchParams),
+    [canonicalCountdownSearch],
+  );
+
+  const helperAlert = {
+    title: "Time is required",
+    description: "Enter a valid ISO UTC time to start the countdown.",
+  };
 
   useEffect(() => {
     const url = new URL(window.location.href);
-    url.search = searchParams.toString();
+    url.search = editorSearchString;
     window.history.replaceState(null, "", url.toString());
-  }, [searchParams]);
+  }, [editorSearchString]);
 
-  const handleCopy = async () => {
+  useEffect(() => {
+    if (!publishedDefaultsSearch) {
+      setSlugDefaultsSearch(null);
+      return;
+    }
+    setSlugDefaultsSearch(publishedDefaultsSearch.replace(/^\?/, ""));
+  }, [publishedDefaultsSearch]);
+
+  const handleOpen = () => {
+    if (publishedSlug) {
+      window.location.href = new URL(
+        `${import.meta.env.BASE_URL}v/${publishedSlug}`,
+        window.location.origin,
+      ).toString();
+      return;
+    }
+    window.location.href = shareUrl;
+  };
+
+  const safeParseJson = (value: string) => {
     try {
-      await navigator.clipboard.writeText(shareUrl);
-      setCopyStatus("copied");
-      window.setTimeout(() => setCopyStatus("idle"), 2000);
-    } catch (error) {
-      console.warn("Clipboard copy failed", error);
-      setCopyStatus("error");
+      return JSON.parse(value);
+    } catch {
+      return null;
     }
   };
 
-  const handleOpen = () => {
-    window.location.href = shareUrl;
+  useEffect(() => {
+    if (!publishedContext) return;
+    if (publishedSlugRef.current === publishedContext.slug) return;
+    publishedSlugRef.current = publishedContext.slug;
+
+    setCustomSlugInput(publishedContext.slug);
+    setPublishResult({
+      slug: publishedContext.slug,
+      shortUrl: new URL(
+        `${import.meta.env.BASE_URL}v/${publishedContext.slug}`,
+        window.location.origin,
+      ).toString(),
+      longUrl: "",
+      expiresAt: publishedContext.expiresAt ?? Date.now(),
+      requiresPassword: publishedContext.requiresPassword,
+    });
+    setPublishStatus("success");
+    setPublishMessage(null);
+    setDeleteStatus("idle");
+    setDeleteMessage(null);
+    setDeleteConfirmInput("");
+    setPublishPasswordInput("");
+    setOwnerPasswordInput("");
+    setOwnerUnlockStatus("idle");
+    setOwnerUnlockMessage(null);
+    setIsOwnerUnlocked(!publishedContext.requiresPassword);
+    ownerPasswordRef.current = null;
+  }, [publishedContext]);
+
+  const handleOwnerUnlock = async () => {
+    if (!publishedSlug) return;
+    if (!ownerPasswordInput.trim()) {
+      setOwnerUnlockStatus("error");
+      setOwnerUnlockMessage("Password required to unlock editing.");
+      return;
+    }
+
+    setOwnerUnlockStatus("pending");
+    setOwnerUnlockMessage(null);
+
+    try {
+      const response = await fetch(
+        `/api/published/${publishedSlug}?action=verify`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ password: ownerPasswordInput }),
+        },
+      );
+      const text = await response.text();
+      const parsed = safeParseJson(text) as { error?: string } | null;
+
+      if (!response.ok) {
+        setOwnerUnlockStatus("error");
+        setOwnerUnlockMessage(
+          parsed?.error ||
+            "Unable to unlock. Check your password and try again.",
+        );
+        return;
+      }
+
+      setOwnerUnlockStatus("success");
+      setOwnerUnlockMessage("Unlocked.");
+      setIsOwnerUnlocked(true);
+      setPublishPasswordInput(ownerPasswordInput);
+      ownerPasswordRef.current = ownerPasswordInput;
+    } catch (error) {
+      console.warn("Unlock failed", error);
+      setOwnerUnlockStatus("error");
+      setOwnerUnlockMessage("Unable to unlock. Try again.");
+    }
+  };
+
+  const handlePublish = async () => {
+    if (hasTimeError) {
+      setPublishStatus("error");
+      setPublishMessage("Enter a valid time before publishing.");
+      return;
+    }
+
+    const normalizedSlug = customSlugInput
+      ? normalizeSlugInput(customSlugInput)
+      : null;
+
+    if (customSlugInput && !normalizedSlug) {
+      setPublishStatus("error");
+      setPublishMessage(
+        "Slug must be 3-48 lowercase letters/numbers with optional hyphens.",
+      );
+      return;
+    }
+
+    const publishPassword =
+      normalizedSlug && publishedSlug && normalizedSlug === publishedSlug
+        ? publishPasswordInput || ownerPasswordRef.current
+        : publishPasswordInput;
+
+    if (normalizedSlug && !publishPassword) {
+      setPublishStatus("error");
+      setPublishMessage("Password required for a custom slug.");
+      return;
+    }
+
+    setPublishStatus("pending");
+    setPublishMessage(null);
+
+    const payload = {
+      canonicalSearch: canonicalCountdownSearch,
+      ...(normalizedSlug
+        ? { slug: normalizedSlug, password: publishPassword }
+        : {}),
+    };
+
+    try {
+      const response = await fetch("/publish", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+      const text = await response.text();
+      const parsed = safeParseJson(text) as {
+        slug?: string;
+        shortUrl?: string;
+        longUrl?: string;
+        expiresAt?: number;
+        error?: string;
+        message?: string;
+      } | null;
+
+      if (!response.ok) {
+        const message =
+          parsed?.error ||
+          parsed?.message ||
+          "Unable to publish the countdown.";
+        setPublishStatus("error");
+        setPublishMessage(message);
+        return;
+      }
+
+      if (!parsed?.slug || !parsed?.shortUrl) {
+        setPublishStatus("error");
+        setPublishMessage("Publish succeeded but the response was malformed.");
+        return;
+      }
+
+      const result: PublishResult = {
+        slug: parsed.slug,
+        shortUrl: new URL(
+          `${import.meta.env.BASE_URL}v/${parsed.slug}`,
+          window.location.origin,
+        ).toString(),
+        longUrl: parsed.longUrl ?? shareUrl,
+        expiresAt: parsed.expiresAt ?? Date.now(),
+        requiresPassword: Boolean(normalizedSlug),
+      };
+
+      if (normalizedSlug && publishPasswordInput) {
+        ownerPasswordRef.current = publishPasswordInput;
+      }
+
+      setPublishResult(result);
+      setPublishStatus("success");
+      setCustomSlugInput(result.slug);
+      setPublishPasswordInput("");
+      setDeleteConfirmInput("");
+      setDeleteStatus("idle");
+      setDeleteMessage(null);
+
+      if (publishedSlug && result.slug === publishedSlug) {
+        setSlugDefaultsSearch(canonicalCountdownSearch);
+      }
+    } catch (error) {
+      console.warn("Publish failed", error);
+      setPublishStatus("error");
+      setPublishMessage("Unable to publish the countdown. Try again.");
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!publishResult) return;
+    const confirmationMatches =
+      deleteConfirmInput.trim().toLowerCase() === publishResult.slug;
+
+    if (!confirmationMatches) {
+      setDeleteStatus("error");
+      setDeleteMessage("Type the slug to confirm deletion.");
+      return;
+    }
+
+    const password = publishResult.requiresPassword
+      ? ownerPasswordRef.current
+      : null;
+
+    if (publishResult.requiresPassword && !password) {
+      setDeleteStatus("error");
+      setDeleteMessage("Unlock with the owner password to delete this slug.");
+      return;
+    }
+
+    setDeleteStatus("pending");
+    setDeleteMessage(null);
+
+    const payload = publishResult.requiresPassword ? { password } : undefined;
+
+    try {
+      const response = await fetch(`/api/published/${publishResult.slug}`, {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload ?? {}),
+      });
+      const text = await response.text();
+      const parsed = safeParseJson(text) as {
+        error?: string;
+      } | null;
+
+      if (!response.ok) {
+        const message = parsed?.error || "Unable to delete the published slug.";
+        setDeleteStatus("error");
+        setDeleteMessage(message);
+        return;
+      }
+
+      setDeleteStatus("success");
+      setDeleteMessage("Published slug removed.");
+      setPublishResult(null);
+      setPublishStatus("idle");
+      setPublishMessage(null);
+      setCustomSlugInput("");
+      setPublishPasswordInput("");
+      setDeleteConfirmInput("");
+    } catch (error) {
+      console.warn("Delete slug failed", error);
+      setDeleteStatus("error");
+      setDeleteMessage("Unable to delete the published slug.");
+    }
   };
 
   const updateField =
@@ -435,24 +822,67 @@ const EditPage = ({ initialParams }: EditPageProps) => {
     };
   }, [form.imageInput]);
 
+  const showOwnerGate =
+    publishedSlug && publishedRequiresPassword && !isOwnerUnlocked;
+
+  const deleteConfirmationMatches = publishResult
+    ? deleteConfirmInput.trim().toLowerCase() === publishResult.slug
+    : false;
+
+  if (showOwnerGate) {
+    return (
+      <div className="mx-auto flex min-h-screen w-full max-w-md flex-col justify-center px-4 py-6 text-left">
+        <Card>
+          <CardHeader>
+            <CardTitle>Owner access</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              This countdown is password-protected. Enter the password to edit
+              or delete it.
+            </p>
+          </CardHeader>
+          <CardContent>
+            <form
+              className="space-y-3"
+              onSubmit={(event) => {
+                event.preventDefault();
+                handleOwnerUnlock();
+              }}
+            >
+              <div className="space-y-2">
+                <Label htmlFor="owner-password">Password</Label>
+                <Input
+                  id="owner-password"
+                  type="password"
+                  placeholder="Enter owner password"
+                  value={ownerPasswordInput}
+                  onChange={(event) =>
+                    setOwnerPasswordInput(event.target.value)
+                  }
+                  disabled={ownerUnlockStatus === "pending"}
+                />
+              </div>
+              <Button
+                type="submit"
+                disabled={
+                  ownerUnlockStatus === "pending" || !ownerPasswordInput.trim()
+                }
+              >
+                {ownerUnlockStatus === "pending" ? "Checking…" : "Edit"}
+              </Button>
+              {ownerUnlockStatus === "error" && ownerUnlockMessage ? (
+                <p className="text-xs text-destructive">{ownerUnlockMessage}</p>
+              ) : null}
+            </form>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-8 px-4 py-6 text-left">
       <header className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            Editor
-          </p>
-          <h1 className="text-2xl font-semibold">Customize your countdown</h1>
-        </div>
         <nav className="flex items-center gap-3">
-          <button
-            className="inline-flex items-center rounded-md px-2.5 py-2 text-sm font-semibold transition hover:opacity-80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-            onClick={handleOpen}
-            title="View countdown"
-            disabled={hasTimeError}
-          >
-            View
-          </button>
           <a
             className="inline-flex items-center rounded-md px-2.5 py-2 text-sm font-semibold transition hover:opacity-80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
             href="https://github.com/obartra/countdown"
@@ -469,6 +899,14 @@ const EditPage = ({ initialParams }: EditPageProps) => {
               <path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z" />
             </svg>
           </a>
+          <button
+            className="inline-flex items-center rounded-md px-2.5 py-2 text-sm font-semibold transition hover:opacity-80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            onClick={handleOpen}
+            title="View countdown"
+            disabled={hasTimeError}
+          >
+            View
+          </button>
         </nav>
       </header>
 
@@ -482,7 +920,9 @@ const EditPage = ({ initialParams }: EditPageProps) => {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="time">Time</Label>
+              <Label htmlFor="time" className="mb-1 block">
+                Time
+              </Label>
               <ReactDatePicker
                 id="time"
                 selected={localTimeInput}
@@ -494,10 +934,7 @@ const EditPage = ({ initialParams }: EditPageProps) => {
                 className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                 aria-describedby="time-helper-text"
               />
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Quick presets
-                </span>
+              <div className="flex flex-wrap gap-2 pt-2">
                 {timePresets.map((preset) => (
                   <Button
                     key={preset.label}
@@ -510,44 +947,11 @@ const EditPage = ({ initialParams }: EditPageProps) => {
                   </Button>
                 ))}
               </div>
-              <p
-                id="time-helper-text"
-                className="text-xs text-muted-foreground"
-              >
-                We convert your local time to UTC automatically.
-              </p>
               {hasTimeError ? (
                 <div className="text-sm text-destructive">
                   Enter a valid date/time.
                 </div>
-              ) : (
-                <div className="rounded-lg border border-input bg-muted/40 p-3 text-sm">
-                  <div className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    Time summary
-                    <span className="rounded-full bg-primary/15 px-2 py-0.5 text-[11px] font-semibold text-primary">
-                      {timeZoneName}
-                    </span>
-                  </div>
-                  <dl className="mt-2 space-y-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <dt className="text-xs uppercase text-muted-foreground">
-                        UTC
-                      </dt>
-                      <dd>
-                        <code className="rounded bg-background px-2 py-1 font-mono text-xs">
-                          {interpretedUtc}
-                        </code>
-                      </dd>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <dt className="text-xs uppercase text-muted-foreground">
-                        Local
-                      </dt>
-                      <dd className="font-mono text-sm">{interpretedLocal}</dd>
-                    </div>
-                  </dl>
-                </div>
-              )}
+              ) : null}
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">
@@ -686,13 +1090,14 @@ const EditPage = ({ initialParams }: EditPageProps) => {
                     <div>
                       <div className="text-sm font-semibold">Custom colors</div>
                       <div className="text-xs text-muted-foreground">
-                        {form.bgcolor} / {form.color}
+                        {previewParams.backgroundColor} /{" "}
+                        {previewParams.textColor}
                       </div>
                     </div>
                     <span
                       className="h-10 w-10 rounded-md border"
                       style={{
-                        background: `linear-gradient(135deg, ${form.bgcolor} 50%, ${form.color} 50%)`,
+                        background: `linear-gradient(135deg, ${previewParams.backgroundColor} 50%, ${previewParams.textColor} 50%)`,
                         borderColor: "rgba(255,255,255,0.1)",
                       }}
                       aria-hidden
@@ -701,8 +1106,8 @@ const EditPage = ({ initialParams }: EditPageProps) => {
                 ) : null}
               </div>
               <p className="text-xs text-muted-foreground">
-                Themes set both background and text colors. URLs still include
-                `bgcolor` and `color`.
+                Themes set both background and text colors. The URL only
+                includes non-default overrides.
               </p>
             </div>
 
@@ -801,115 +1206,269 @@ const EditPage = ({ initialParams }: EditPageProps) => {
                 <div className="mt-2 flex justify-center">
                   <img
                     src={imagePreviewUrl}
-                    alt={form.image}
+                    alt={previewParams.image ?? form.image}
                     className="max-h-40 max-w-40 object-contain"
                   />
                 </div>
                 <p className="mt-2 text-xs text-muted-foreground break-all">
-                  {form.image}
+                  {previewParams.image ?? form.image}
                 </p>
               </div>
             ) : null}
 
-            <div className="flex flex-wrap gap-2 pt-2">
-              <Button
-                type="button"
-                onClick={handleCopy}
-                disabled={hasTimeError}
-              >
-                Copy shareable link
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={handleOpen}
-                disabled={hasTimeError}
-              >
-                Open countdown
-              </Button>
-              <span className="text-sm text-muted-foreground">
-                {copyStatus === "copied"
-                  ? "Copied!"
-                  : copyStatus === "error"
-                    ? "Clipboard unavailable, copy manually."
-                    : shareUrl}
-              </span>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Preview</CardTitle>
-            <p className="text-sm text-muted-foreground">
-              Live view using the current parameters.
-            </p>
-          </CardHeader>
-          <CardContent>
-            <div
-              className="rounded-2xl p-6 text-center shadow-sm"
-              style={{
-                backgroundColor: previewParams.backgroundColor,
-                color: previewParams.textColor,
-              }}
-            >
-              {countdownState === "helper" ? (
-                <Alert variant="warning" className="mx-auto max-w-xl text-left">
-                  <AlertTitle>Time is required</AlertTitle>
-                  <AlertDescription>
-                    Enter a valid ISO UTC time to start the countdown.
-                  </AlertDescription>
-                </Alert>
-              ) : null}
-
-              {countdownState === "countdown" ? (
-                <div className="space-y-2">
-                  {previewParams.title ? (
-                    <h3 className="text-xl font-semibold">
-                      {previewParams.title}
-                    </h3>
-                  ) : null}
-                  <div className="font-mono text-5xl font-semibold leading-tight sm:text-6xl">
-                    {countdownLabel}
-                  </div>
-                  <div className="text-sm font-medium">
-                    Time until <span>{endDateText}</span> (
-                    <span>{timeZoneName}</span>)
-                  </div>
+            <section className="space-y-2 pt-4">
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Share
                 </div>
-              ) : null}
-
-              {countdownState === "complete" ? (
-                <div className="text-3xl font-semibold">
-                  {previewParams.completeText}
+                <p className="text-xs text-muted-foreground">
+                  Copy or open the shareable link for this countdown.
+                </p>
+              </div>
+              <ShareLinkActions
+                url={shareUrl}
+                onView={handleOpen}
+                disabled={hasTimeError}
+              />
+            </section>
+            <section className="space-y-4 pt-4">
+              <div className="space-y-1">
+                <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Publish
                 </div>
-              ) : null}
-
-              {imagePreviewUrl ? (
-                <div className="mt-4 flex justify-center">
-                  <img
-                    src={imagePreviewUrl}
-                    alt={previewParams.image}
-                    className="emoji-image"
+                <p className="text-xs text-muted-foreground">
+                  Save this countdown to a short-lived slug that you can share
+                  without the long query string.
+                </p>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <div className="flex flex-col gap-1">
+                  <Label
+                    htmlFor="publish-slug"
+                    className="text-xs font-semibold text-muted-foreground"
+                  >
+                    Slug (optional)
+                  </Label>
+                  <Input
+                    id="publish-slug"
+                    placeholder="Leave blank for generated slug"
+                    value={customSlugInput}
+                    onChange={(event) => setCustomSlugInput(event.target.value)}
+                    disabled={publishStatus === "pending"}
                   />
                 </div>
-              ) : null}
-
-              {previewParams.description && countdownState !== "helper" ? (
-                <p className="mt-4 text-base text-muted-foreground">
-                  {previewParams.description}
+                <div className="flex flex-col gap-1">
+                  <Label
+                    htmlFor="publish-password"
+                    className="text-xs font-semibold text-muted-foreground"
+                  >
+                    Password
+                  </Label>
+                  <Input
+                    id="publish-password"
+                    type="password"
+                    placeholder="Required for custom slug"
+                    value={publishPasswordInput}
+                    onChange={(event) =>
+                      setPublishPasswordInput(event.target.value)
+                    }
+                    disabled={publishStatus === "pending"}
+                  />
+                </div>
+              </div>
+              {slugValidationMessage ? (
+                <p className="text-xs text-destructive">
+                  {slugValidationMessage}
                 </p>
               ) : null}
-
-              {previewParams.footer && countdownState !== "helper" ? (
-                <p className="mt-4 text-sm font-medium">
-                  {previewParams.footer}
-                </p>
+              <div className="flex flex-wrap items-center gap-3">
+                <Button
+                  type="button"
+                  onClick={handlePublish}
+                  disabled={
+                    hasTimeError ||
+                    publishStatus === "pending" ||
+                    Boolean(slugValidationMessage) ||
+                    (customSlugInput &&
+                      !publishPasswordInput &&
+                      !(
+                        publishedSlug &&
+                        normalizedCustomSlug === publishedSlug &&
+                        ownerPasswordRef.current
+                      ))
+                  }
+                >
+                  {publishStatus === "pending"
+                    ? "Publishing…"
+                    : "Publish short URL"}
+                </Button>
+                {publishStatus === "success" && publishResult ? (
+                  <span className="text-xs text-muted-foreground">
+                    Published as{" "}
+                    <span className="font-semibold">{publishResult.slug}</span>.
+                  </span>
+                ) : null}
+              </div>
+              {publishStatus === "error" && publishMessage ? (
+                <p className="text-xs text-destructive">{publishMessage}</p>
               ) : null}
-            </div>
+              {publishResult ? (
+                <div className="space-y-2 pt-2">
+                  <div>
+                    <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      Short link
+                    </div>
+                    <ShareLinkActions
+                      url={publishResult.shortUrl}
+                      disabled={false}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      {publishResult.requiresPassword
+                        ? formatRelativeExpiry(publishResult.expiresAt)
+                        : "Expires in 30 days"}
+                      {" · "}
+                      Expires on{" "}
+                      {new Date(publishResult.expiresAt).toLocaleDateString()}.
+                    </p>
+                  </div>
+                  <div className="rounded-lg border border-destructive/60 bg-destructive/10 p-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="text-xs font-semibold uppercase tracking-wide text-destructive">
+                          Danger zone
+                        </div>
+                        <p className="text-xs text-destructive">
+                          Deleting reclaims the slug immediately.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="mt-3 flex flex-col gap-1">
+                      <Label
+                        htmlFor="delete-confirm"
+                        className="text-xs font-semibold text-destructive"
+                      >
+                        Type slug to confirm
+                      </Label>
+                      <Input
+                        id="delete-confirm"
+                        placeholder={publishResult.slug}
+                        value={deleteConfirmInput}
+                        onChange={(event) =>
+                          setDeleteConfirmInput(event.target.value)
+                        }
+                        disabled={deleteStatus === "pending"}
+                      />
+                    </div>
+                    <div className="mt-3 flex flex-wrap items-center gap-3">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={handleDelete}
+                        disabled={
+                          deleteStatus === "pending" ||
+                          !deleteConfirmationMatches
+                        }
+                      >
+                        {deleteStatus === "pending"
+                          ? "Deleting…"
+                          : "Delete published slug"}
+                      </Button>
+                      {deleteStatus === "success" && deleteMessage ? (
+                        <p className="text-xs text-muted-foreground">
+                          {deleteMessage}
+                        </p>
+                      ) : deleteStatus === "error" && deleteMessage ? (
+                        <p className="text-xs text-destructive">
+                          {deleteMessage}
+                        </p>
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+            </section>
           </CardContent>
         </Card>
+
+        <div>
+          <div
+            ref={previewCardRef}
+            data-testid="full-preview-card"
+            className="lg:sticky lg:top-6"
+          >
+            <Card>
+              <CardHeader>
+                <CardTitle>Preview</CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  Live view using the current parameters.
+                </p>
+              </CardHeader>
+              <CardContent className="p-0">
+                <div
+                  className="rounded-2xl px-6 py-8 text-left shadow-sm"
+                  style={{
+                    backgroundColor: previewParams.backgroundColor,
+                    color: previewParams.textColor,
+                    ...previewThemeVars,
+                  }}
+                >
+                  {previewParams.title ? (
+                    <h2
+                      data-testid="preview-title"
+                      className="mb-5 text-2xl font-semibold leading-tight"
+                    >
+                      {previewParams.title}
+                    </h2>
+                  ) : null}
+                  <CountdownPreview
+                    params={previewParams}
+                    state={countdownState}
+                    countdownDisplay={countdownDisplay}
+                    targetDate={targetDate}
+                    helperAlert={helperAlert}
+                    className="text-left"
+                    reportAction={{ onClick: () => {} }}
+                  />
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
       </div>
+
+      {showMiniPreview ? (
+        <div
+          data-testid="mini-preview"
+          className="pointer-events-none fixed top-4 right-4 z-50 overflow-hidden rounded-2xl border border-border shadow-xl lg:hidden"
+          aria-hidden="true"
+          style={{
+            width: "clamp(160px, 25vw, 240px)",
+            aspectRatio: miniAspectRatio || 1,
+            backgroundColor: previewParams.backgroundColor,
+            color: previewParams.textColor,
+            ...previewThemeVars,
+          }}
+        >
+          <div className="h-full w-full overflow-hidden">
+            <div
+              className="h-full w-full px-6 py-8"
+              style={{
+                zoom: "0.65",
+              }}
+            >
+              <CountdownPreview
+                params={previewParams}
+                state={countdownState}
+                countdownDisplay={countdownDisplay}
+                targetDate={targetDate}
+                helperAlert={helperAlert}
+                className="gap-3 text-left"
+                reportAction={{ onClick: () => {} }}
+              />
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 };

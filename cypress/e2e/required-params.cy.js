@@ -1,13 +1,12 @@
 describe("required parameter editor", () => {
-  const editor = () => cy.contains("Customize your countdown");
+  const editor = () => cy.get("#time");
   const countdown = () => cy.get("#countdown");
 
   it("shows editor when time/date are missing", () => {
     cy.visit("/");
-    cy.contains(/loading editor/i).should("be.visible");
     editor().should("be.visible");
     cy.contains("Time").should("be.visible");
-    countdown().should("not.exist");
+    countdown().should("not.be.visible");
   });
 
   it("starts countdown when time is provided", () => {

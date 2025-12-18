@@ -40,7 +40,7 @@ export const CountdownGrid = ({
         {parts.map((item) => (
           <div
             key={item.key}
-            className="rounded-xl border border-border bg-muted/20 px-3 py-4 shadow-sm"
+            className="rounded-xl border border-border bg-card px-3 py-4 shadow-sm"
           >
             <div className="text-3xl font-semibold sm:text-4xl" id="countdown">
               {item.value}

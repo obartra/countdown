@@ -6,6 +6,7 @@ import {
   formatCountdown,
   parseParamsFromSearch,
 } from "../countdown";
+import { createThemeCssVars, resolveThemeTokens } from "../lib/themeCssVars";
 
 type ViewModel = {
   params: CountdownParams;
@@ -32,6 +33,19 @@ export const useCountdownViewModel = (
     () => initialParams ?? parseParamsFromSearch(window.location.search),
     [initialParams],
   );
+  const themeTokens = useMemo(
+    () =>
+      resolveThemeTokens({
+        backgroundColor: params.backgroundColor,
+        textColor: params.textColor,
+        themeKey: params.themeKey,
+      }),
+    [params.backgroundColor, params.textColor, params.themeKey],
+  );
+  const themeCssVars = useMemo(
+    () => createThemeCssVars(themeTokens),
+    [themeTokens],
+  );
   const {
     trimmedTime,
     targetDate,
@@ -54,11 +68,26 @@ export const useCountdownViewModel = (
   useEffect(() => {
     document.body.style.backgroundColor = params.backgroundColor;
     document.body.style.color = params.textColor;
+    const root = document.documentElement;
+    const previous = new Map<string, string>();
+    for (const [key, value] of Object.entries(themeCssVars)) {
+      previous.set(key, root.style.getPropertyValue(key));
+      root.style.setProperty(key, value);
+    }
+
     return () => {
       document.body.style.backgroundColor = "";
       document.body.style.color = "";
+      for (const key of Object.keys(themeCssVars)) {
+        const previousValue = previous.get(key);
+        if (previousValue) {
+          root.style.setProperty(key, previousValue);
+        } else {
+          root.style.removeProperty(key);
+        }
+      }
     };
-  }, [params.backgroundColor, params.textColor]);
+  }, [params.backgroundColor, params.textColor, themeCssVars]);
 
   useEffect(() => {
     if (state !== "countdown" || !targetDate) {

@@ -2,6 +2,8 @@ import { DEFAULT_THEME_KEY, themeMap, themes } from "./themes";
 
 export type CountdownState = "helper" | "countdown" | "complete";
 
+export const DEFAULT_COMPLETE_TEXT = "Time is up!";
+
 export type CountdownDisplay = {
   label: string;
   totalMs: number;
@@ -161,7 +163,7 @@ export const parseParamsFromSearch = (search: string): CountdownParams => {
     description: params.get("description") || undefined,
     footer: params.get("footer") || undefined,
     image: params.get("image") || undefined,
-    completeText: params.get("complete") || "Time is up!",
+    completeText: params.get("complete") || DEFAULT_COMPLETE_TEXT,
     backgroundColor: colors.backgroundColor,
     textColor: colors.textColor,
     backgroundColorInput: bgcolor || "",

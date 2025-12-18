@@ -31,11 +31,17 @@ export const useImageMaxHeight = ({
       const containerTop = container.getBoundingClientRect().top;
       const descriptionHeight =
         description && description.style.display !== "none"
-          ? description.getBoundingClientRect().height
+          ? (() => {
+              const rect = description.getBoundingClientRect();
+              return rect.top > containerTop ? rect.height : 0;
+            })()
           : 0;
       const footerHeight =
         footer && footer.style.display !== "none"
-          ? footer.getBoundingClientRect().height
+          ? (() => {
+              const rect = footer.getBoundingClientRect();
+              return rect.top > containerTop ? rect.height : 0;
+            })()
           : 0;
       const paddingBottom = Number.parseFloat(
         getComputedStyle(root).paddingBottom || "0",

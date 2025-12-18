@@ -1,17 +1,12 @@
 # Tailwind + shadcn/ui Migration
 
 ## Context
-- React 18 + Vite build to `docs/` (base `/countdown/` for GitHub Pages).
-- Countdown UI lives in `src/App.tsx` with Bootstrap classes from CDN (`index.html`); `src/style.css` tweaks Bootstrap tokens/layout.
-- Cypress e2e (`cypress/e2e/required-params.cy.js`) asserts high-level behavior (helper vs countdown vs complete) and background/text color inference but not styling classes.
-- No Tailwind/PostCSS setup, no component abstraction; all markup is Bootstrap-flavored JSX/HTML.
+- Current app uses Tailwind + shadcn/ui; Bootstrap removed. Base path `/` (Vite), Netlify functions for backend.
+- UI components live under `src/components/ui/`, styling via `src/style.css` + Tailwind config; instructions page updated to Tailwind.
 
 ## Goals
-- Remove Bootstrap (CSS/JS/CDN) from the countdown app and the generated instructions page.
-- Introduce Tailwind CSS (with Preflight) and shadcn/ui primitives for consistent, accessible styling.
-- Preserve existing query-parameter API and countdown behavior (helper -> countdown -> complete states, color inference, emoji images).
-- Keep the Vite build footprint and GitHub Pages deployment flow unchanged (output still to `docs/`, base `/countdown/`).
-- Clarify a component/layout foundation to simplify future UI tweaks without Bootstrap utilities.
+- Maintain Tailwind + shadcn foundation; keep query-param API, publish/report flows, and theme tokens intact.
+- Keep instructions page and SPA styling consistent; avoid reintroducing Bootstrap/CDN deps.
 
 ## Non-goals
 - Changing countdown semantics, URL parameter names, or emoji generation behavior.
@@ -28,20 +23,13 @@
   - Display text: formatted countdown string, localized date/time zone, document title set per state.
 - Instructions surface: static HTML built from markdown + Handlebars template that documents the same parameters and lists emojis.
 
-## Approach
-- Tooling setup: add `tailwindcss`, `postcss`, `autoprefixer`; create Tailwind config and PostCSS config; wire Tailwind entry CSS into Vite; ensure `base` handling stays `/countdown/`.
-- Component layer: scaffold shadcn/ui primitives needed to replace Bootstrap usage (Button, Input, Card, Alert, Nav/Link, Layout shell). Prefer colocated `components/ui/*` with Tailwind class-based styling; add any shared layout wrappers (e.g., `PageShell`, `Header`).
-- App rewrite: replace Bootstrap classnames in `src/App.tsx`/`src/main.tsx` with Tailwind/shadcn equivalents; remove reliance on Bootstrap utilities; keep existing IDs and semantic structure that tests depend on.
-- Styles cleanup: drop Bootstrap CDN link from `index.html`; retire Bootstrap-specific rules from `src/style.css` after Tailwind equivalents exist; add global Tailwind layers and any custom CSS for body colors/emoji sizing that depend on runtime values.
-- Instructions page: update `src/template.html` to Tailwind (remove Bootstrap/jQuery); add a small script or use progressive disclosure without Bootstrap JS; ensure markdown table stays responsive via Tailwind classes; keep emoji path rewriting intact.
-- Assets/build: confirm emoji middleware in `vite.config.ts` still serves SVGs; ensure PurgeCSS safelist covers any dynamic classes (or prefer inline styles for user-provided colors).
+- Approach (completed): Tailwind/postcss configured; shadcn primitives in `src/components/ui`. Bootstrap removed from `index.html`; styles centralized in Tailwind layers. Instructions page uses Tailwind utilities.
+- Assets/build: base `/`; image handling uses provider search (no emoji middleware), Tailwind classes are static/safe-listed via config.
 
 ## Invariants
-- Query params remain the sole source of countdown configuration; `time`/`date` parsing rules and validation stay unchanged.
-- Body background/text colors continue to reflect derived colors; contrast inference stays functional when only one color is provided.
-- View-state logic (helper vs countdown vs complete) and document title updates remain intact.
-- GitHub Pages base path `/countdown/` and `docs/` output directory remain unchanged.
-- Emoji assets stay loadable from `/emojis/{name}.svg` via the existing middleware and build output.
+- Query params remain the contract; publish/report/admin flows unchanged.
+- Body colors/theme tokens applied via CSS vars; view-state logic intact.
+- Base path `/`; Netlify functions handle backend routes; image uses provider search (no local emoji path).
 
 ## Failure Modes
 - Invalid or missing `time`/`date` keeps the helper visible; need clear inline error styling without Bootstrap alerts.

@@ -248,7 +248,7 @@ describe("App", () => {
     const footer = document.querySelector("footer") as HTMLElement;
     rectSpy(container, { top: 100 });
     rectSpy(description, { height: 40 });
-    rectSpy(footer, { height: 30 });
+    rectSpy(footer, { top: 700, height: 30 });
 
     // Trigger resize to recompute
     await act(async () => {
@@ -257,7 +257,7 @@ describe("App", () => {
 
     const img = await screen.findByRole("img", { name: "Large" });
     await vi.waitFor(() => {
-      expect(img.style.maxHeight).toBe("590px"); // 800 - 100 - 40 - 30 - 16 - 24 buffer
+      expect(img.style.maxHeight).toBe("630px"); // 800 - 100 - 30 - 16 - 24 buffer
     });
 
     computedSpy.mockRestore();

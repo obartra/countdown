@@ -20,3 +20,9 @@ Linked design: `docs/design/edit-page-async-datepicker.md`
 
 ### Test plan
 - `pnpm test`
+
+### Acceptance criteria
+- [x] Preset buttons (+30m, +1h, Tomorrow 9:00 AM) set picker and URL time
+- [x] UTC/local readout visible when picker has value; hidden when empty/invalid
+- [x] Validation, preview, and URL sync unchanged otherwise
+> **Status: Implemented** — This PR has been completed and merged.

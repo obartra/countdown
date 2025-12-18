@@ -1,9 +1,0 @@
-/publish         /.netlify/functions/publish                     200
-/admin-stats     /.netlify/functions/admin-stats               200
-/api/admin/reports   /.netlify/functions/admin-reports             200
-/api/admin/reports/:slug  /.netlify/functions/admin-reports-slug?slug=:splat 200
-/v/:slug/report  /.netlify/functions/report?slug=:splat       200
-/api/report/:slug  /.netlify/functions/report?slug=:splat    200
-/api/published/:slug  /.netlify/functions/published?slug=:splat  200
-/api/openverse/*  /.netlify/functions/openverse-proxy/:splat  200
-/*                /index.html                                 200

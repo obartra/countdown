@@ -6,3 +6,48 @@
   
 [build.environment]
   SECRETS_SCAN_OMIT_KEYS = "VITE_TENOR_CLIENT_KEY,VITE_IMAGE_API_KEY_TENOR"
+
+[[redirects]]
+  from = "/publish"
+  to = "/.netlify/functions/publish"
+  status = 200
+
+[[redirects]]
+  from = "/admin-stats"
+  to = "/.netlify/functions/admin-stats"
+  status = 200
+
+[[redirects]]
+  from = "/api/admin/reports"
+  to = "/.netlify/functions/admin-reports"
+  status = 200
+
+[[redirects]]
+  from = "/api/admin/reports/:slug"
+  to = "/.netlify/functions/admin-reports-slug?slug=:splat"
+  status = 200
+
+[[redirects]]
+  from = "/v/:slug/report"
+  to = "/.netlify/functions/report?slug=:splat"
+  status = 200
+
+[[redirects]]
+  from = "/api/report/:slug"
+  to = "/.netlify/functions/report?slug=:splat"
+  status = 200
+
+[[redirects]]
+  from = "/api/published/:slug"
+  to = "/.netlify/functions/published?slug=:splat"
+  status = 200
+
+[[redirects]]
+  from = "/api/openverse/*"
+  to = "/.netlify/functions/openverse-proxy/:splat"
+  status = 200
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

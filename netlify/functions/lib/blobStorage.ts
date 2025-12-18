@@ -1,9 +1,10 @@
+import os from "node:os";
 import path from "node:path";
 import { promises as fs } from "node:fs";
 
 const ROOT_DIR =
   process.env.COUNTDOWN_STORAGE_DIR ||
-  path.resolve(process.cwd(), ".netlify", "published-data");
+  path.resolve(os.tmpdir(), ".netlify", "published-data");
 
 const resolvePath = (segments: string[]) => path.join(ROOT_DIR, ...segments);
 

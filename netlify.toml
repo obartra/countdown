@@ -35,6 +35,12 @@
   force = true
 
 [[redirects]]
+  from = "/api/admin/published"
+  to = "/.netlify/functions/admin-published"
+  status = 200
+  force = true
+
+[[redirects]]
   from = "/v/:slug/report"
   to = "/.netlify/functions/report?slug=:splat"
   status = 200

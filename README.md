@@ -50,7 +50,7 @@ CI runs `pnpm bundle:check` automatically after `pnpm build`.
 - `ADMIN_SECRET` — Required for admin endpoints (`/api/admin/reports`, `/api/admin/reports/:slug`, `/admin-stats`, admin override delete)
 - `VITE_TENOR_CLIENT_KEY`, `VITE_IMAGE_API_KEY_TENOR` — Tenor image search
 - `VITE_OPENVERSE_BASE` — OpenVerse API base (for image search)
-- `COUNTDOWN_STORAGE_DIR` — Override local blob shim root (defaults to `.netlify/published-data`, used in tests)
+- `COUNTDOWN_STORAGE_DIR` — Override local blob shim root (defaults to `/tmp/.netlify/published-data` in Netlify functions, `.netlify/published-data` when running tests locally)
 
 ## API endpoints (Netlify functions)
 
@@ -59,11 +59,15 @@ CI runs `pnpm bundle:check` automatically after `pnpm build`.
 - `DELETE /v/:slug` — Delete published countdown (owner password or `x-admin-override`)
 - `POST /v/:slug/report` — Submit a report (rate limited)
 - `GET /api/admin/reports` — List reported slugs (requires `x-admin-secret`)
+- `GET /api/admin/published` — List published slugs with metadata (paginated, requires `x-admin-secret`)
 - `PATCH /api/admin/reports/:slug` — Mark reviewed
 - `DELETE /api/admin/reports/:slug` — Clear reports (optional `purgeBlobs=true`)
 - `GET /admin/stats` — Admin stats (requires `x-admin-secret`)
 
-Admin UI lives at `/admin/reports` and calls the `/api/admin/reports*` endpoints.
+Admin UI:
+
+- `/admin` — landing hub for admin tools (requires admin secret, includes a Settings card to clear the session secret)
+- `/admin/reports` — toggles between reported and published slugs, calls `/api/admin/reports*` and `/api/admin/published`
 
 ## Dev setup
 

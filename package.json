@@ -18,8 +18,8 @@
     "format:check": "prettier --check .",
     "cy:run": "cypress run",
     "cy:open": "cypress open",
-    "test:e2e": "PORT=4173 FUNCTIONS_PORT=8889 CYPRESS_BASE_URL=http://localhost:4173 VITE_IMAGE_API_KEY_TENOR=test VITE_TENOR_CLIENT_KEY=countdown start-server-and-test start http://localhost:4173 cy:run",
-    "test:e2e:open": "PORT=4173 FUNCTIONS_PORT=8889 CYPRESS_BASE_URL=http://localhost:4173 VITE_IMAGE_API_KEY_TENOR=test VITE_TENOR_CLIENT_KEY=countdown start-server-and-test start http://localhost:4173 cy:open"
+    "test:e2e": "ADMIN_SECRET=admin-e2e-secret CYPRESS_ADMIN_SECRET=admin-e2e-secret PORT=4173 FUNCTIONS_PORT=8889 CYPRESS_BASE_URL=http://localhost:4173 VITE_IMAGE_API_KEY_TENOR=test VITE_TENOR_CLIENT_KEY=countdown start-server-and-test start http://localhost:4173 cy:run",
+    "test:e2e:open": "ADMIN_SECRET=admin-e2e-secret CYPRESS_ADMIN_SECRET=admin-e2e-secret PORT=4173 FUNCTIONS_PORT=8889 CYPRESS_BASE_URL=http://localhost:4173 VITE_IMAGE_API_KEY_TENOR=test VITE_TENOR_CLIENT_KEY=countdown start-server-and-test start http://localhost:4173 cy:open"
   },
   "repository": {
     "type": "git",

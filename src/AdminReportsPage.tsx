@@ -1,4 +1,6 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+
+type AdminView = "reports" | "published";
 
 type ReportItem = {
   slug: string;
@@ -14,13 +16,28 @@ type ReportsResponse = {
   total: number;
 };
 
+type PublishedItem = {
+  slug: string;
+  createdAt: number;
+  timeMs: number;
+  expiresAt: number | null | undefined;
+  published: boolean;
+  requiresPassword: boolean;
+};
+
+type PublishedResponse = {
+  items: PublishedItem[];
+  nextCursor: string | null;
+  total: number;
+};
+
 type FetchState = {
   loading: boolean;
   error: string | null;
 };
 
 const API_BASE = "/api/admin/reports";
-const PUBLISHED_API_BASE = "/api/published";
+const PUBLISHED_API_BASE = "/api/admin/published";
 
 const formatDateTime = (iso: string) => {
   const ms = Date.parse(iso);
@@ -35,6 +52,11 @@ const parseDatetimeLocal = (value: string) => {
   return new Date(ms).toISOString();
 };
 
+const formatTimestamp = (value?: number | null) =>
+  value !== undefined && value !== null
+    ? formatDateTime(new Date(value).toISOString())
+    : "—";
+
 const AdminReportsPage: React.FC = () => {
   const [secretInput, setSecretInput] = useState<string>(() => {
     if (typeof window === "undefined") return "";
@@ -44,28 +66,55 @@ const AdminReportsPage: React.FC = () => {
     if (typeof window === "undefined") return "";
     return window.sessionStorage.getItem("adminSecret") ?? "";
   });
+  const [view, setView] = useState<AdminView>("reports");
 
-  const [items, setItems] = useState<ReportItem[]>([]);
-  const [nextCursor, setNextCursor] = useState<string | null>(null);
-  const [sinceInput, setSinceInput] = useState<string>("");
-  const [hideReviewed, setHideReviewed] = useState<boolean>(false);
-  const [fetchState, setFetchState] = useState<FetchState>({
+  const [reportItems, setReportItems] = useState<ReportItem[]>([]);
+  const [publishedItems, setPublishedItems] = useState<PublishedItem[]>([]);
+  const [reportNextCursor, setReportNextCursor] = useState<string | null>(null);
+  const [publishedNextCursor, setPublishedNextCursor] = useState<string | null>(
+    null,
+  );
+  const [reportTotal, setReportTotal] = useState(0);
+  const [publishedTotal, setPublishedTotal] = useState(0);
+  const [sinceInput, setSinceInput] = useState("");
+  const [hideReviewed, setHideReviewed] = useState(false);
+  const [reportFetchState, setReportFetchState] = useState<FetchState>({
+    loading: false,
+    error: null,
+  });
+  const [publishedFetchState, setPublishedFetchState] = useState<FetchState>({
     loading: false,
     error: null,
   });
   const [confirmAction, setConfirmAction] = useState<{
     type: "delete" | "clear";
     slug: string;
+    view: AdminView;
   } | null>(null);
 
   const hasSecret = secret.trim().length > 0;
 
+  const updateFetchStateForView = (
+    targetView: AdminView,
+    state: FetchState,
+  ) => {
+    if (targetView === "reports") {
+      setReportFetchState(state);
+    } else {
+      setPublishedFetchState(state);
+    }
+  };
+
   const loadReports = useCallback(
     async ({ reset }: { reset: boolean }) => {
       if (!hasSecret) return;
-      setFetchState({ loading: true, error: null });
+      setReportFetchState({ loading: true, error: null });
       try {
         const params = new URLSearchParams();
+        params.set("limit", "50");
+        if (!reset && reportNextCursor) {
+          params.set("cursor", reportNextCursor);
+        }
         if (reset) {
           if (sinceInput) {
             const iso = parseDatetimeLocal(sinceInput);
@@ -75,45 +124,124 @@ const AdminReportsPage: React.FC = () => {
         } else if (hideReviewed) {
           params.set("reviewed", "false");
         }
-        params.set("limit", "50");
-        if (!reset && nextCursor) params.set("cursor", nextCursor);
         const response = await fetch(`${API_BASE}?${params.toString()}`, {
           method: "GET",
           headers: { "x-admin-secret": secret },
         });
         if (response.status === 401) {
-          setFetchState({
+          setReportFetchState({
             loading: false,
             error: "Invalid admin secret",
           });
           return;
         }
         if (!response.ok) {
-          setFetchState({
+          setReportFetchState({
             loading: false,
             error: `Failed to load reports (${response.status})`,
           });
           return;
         }
         const data = (await response.json()) as ReportsResponse;
-        setItems((prev) => (reset ? data.items : [...prev, ...data.items]));
-        setNextCursor(data.nextCursor);
-        setFetchState({ loading: false, error: null });
+        setReportItems((prev) =>
+          reset ? data.items : [...prev, ...data.items],
+        );
+        setReportNextCursor(data.nextCursor);
+        setReportTotal(data.total);
+        setReportFetchState({ loading: false, error: null });
       } catch (error) {
         console.error(error);
-        setFetchState({
+        setReportFetchState({
           loading: false,
           error: "Unexpected error loading reports",
         });
       }
     },
-    [hasSecret, hideReviewed, nextCursor, secret, sinceInput],
+    [hideReviewed, hasSecret, reportNextCursor, secret, sinceInput],
+  );
+
+  const loadPublished = useCallback(
+    async ({ reset }: { reset: boolean }) => {
+      if (!hasSecret) return;
+      updateFetchStateForView("published", { loading: true, error: null });
+      if (reset) {
+        setPublishedItems([]);
+        setPublishedNextCursor(null);
+      }
+      try {
+        const params = new URLSearchParams();
+        params.set("limit", "50");
+        if (!reset && publishedNextCursor) {
+          params.set("cursor", publishedNextCursor);
+        }
+        const response = await fetch(
+          `${PUBLISHED_API_BASE}?${params.toString()}`,
+          {
+            method: "GET",
+            headers: { "x-admin-secret": secret },
+          },
+        );
+        if (response.status === 401) {
+          updateFetchStateForView("published", {
+            loading: false,
+            error: "Invalid admin secret",
+          });
+          return;
+        }
+        if (!response.ok) {
+          updateFetchStateForView("published", {
+            loading: false,
+            error: `Failed to load published slugs (${response.status})`,
+          });
+          return;
+        }
+        const data = (await response.json()) as PublishedResponse;
+        setPublishedItems((prev) =>
+          reset ? data.items : [...prev, ...data.items],
+        );
+        setPublishedNextCursor(data.nextCursor);
+        setPublishedTotal(data.total);
+        updateFetchStateForView("published", { loading: false, error: null });
+      } catch (error) {
+        console.error(error);
+        updateFetchStateForView("published", {
+          loading: false,
+          error: "Unexpected error loading published slugs",
+        });
+      }
+    },
+    [hasSecret, publishedNextCursor, secret],
   );
 
   useEffect(() => {
     if (!hasSecret) return;
     loadReports({ reset: true }).catch(() => {});
   }, [hasSecret, loadReports]);
+
+  useEffect(() => {
+    if (!hasSecret) return;
+    if (view === "published" && publishedItems.length === 0) {
+      loadPublished({ reset: true }).catch(() => {});
+    }
+  }, [hasSecret, loadPublished, publishedItems.length, view]);
+
+  const viewDescription = useMemo(() => {
+    if (view === "reports") {
+      return "Review reported slugs. Filter, mark reviewed, and clear or delete problem entries.";
+    }
+    return "Browse every published countdown slug and delete protected content as needed.";
+  }, [view]);
+
+  const activeFetchState =
+    view === "reports" ? reportFetchState : publishedFetchState;
+  const activeItems = view === "reports" ? reportItems : publishedItems;
+  const activeTotal = view === "reports" ? reportTotal : publishedTotal;
+  const activeNextCursor =
+    view === "reports" ? reportNextCursor : publishedNextCursor;
+  const loadNextPage =
+    view === "reports"
+      ? () => loadReports({ reset: false })
+      : () => loadPublished({ reset: false });
 
   const handleSubmitSecret = (event: React.FormEvent) => {
     event.preventDefault();
@@ -125,12 +253,13 @@ const AdminReportsPage: React.FC = () => {
   };
 
   const markReviewed = async (slug: string) => {
-    const prevItems = items;
-    setItems((current) =>
+    const prevItems = reportItems;
+    setReportItems((current) =>
       current.map((item) =>
         item.slug === slug ? { ...item, reviewed: true } : item,
       ),
     );
+    setReportFetchState({ loading: true, error: null });
 
     try {
       const response = await fetch(`${API_BASE}/${slug}`, {
@@ -140,36 +269,38 @@ const AdminReportsPage: React.FC = () => {
         },
       });
       if (!response.ok) {
-        setItems(prevItems);
-        setFetchState({
+        setReportItems(prevItems);
+        setReportFetchState({
           loading: false,
           error:
             response.status === 401
               ? "Invalid admin secret"
               : "Failed to mark reviewed",
         });
+      } else {
+        setReportFetchState({ loading: false, error: null });
       }
     } catch (error) {
       console.error(error);
-      setItems(prevItems);
-      setFetchState({
+      setReportItems(prevItems);
+      setReportFetchState({
         loading: false,
         error: "Failed to mark reviewed",
       });
     }
   };
 
-  // Optimistic-only updates; assumes single-admin usage. Revisit with multi-admin to refetch server state.
-  const performDelete = async (slug: string) => {
-    const prevItems = items;
-    setFetchState({ loading: true, error: null });
+  const performDelete = async (slug: string, actionView: AdminView) => {
+    const prevReportItems = reportItems;
+    const prevPublishedItems = publishedItems;
+    updateFetchStateForView(actionView, { loading: true, error: null });
     try {
-      const response = await fetch(`${PUBLISHED_API_BASE}/${slug}`, {
+      const response = await fetch(`/api/published/${slug}`, {
         method: "DELETE",
         headers: { "x-admin-override": secret },
       });
       if (!response.ok) {
-        setFetchState({
+        updateFetchStateForView(actionView, {
           loading: false,
           error:
             response.status === 401
@@ -178,29 +309,33 @@ const AdminReportsPage: React.FC = () => {
         });
         return;
       }
-      setItems((current) => current.filter((item) => item.slug !== slug));
-      setFetchState({ loading: false, error: null });
+      setReportItems(prevReportItems.filter((item) => item.slug !== slug));
+      setPublishedItems(
+        prevPublishedItems.filter((item) => item.slug !== slug),
+      );
+      updateFetchStateForView(actionView, { loading: false, error: null });
     } catch (error) {
       console.error(error);
-      setItems(prevItems);
-      setFetchState({
+      setReportItems(prevReportItems);
+      setPublishedItems(prevPublishedItems);
+      updateFetchStateForView(actionView, {
         loading: false,
         error: "Failed to delete countdown",
       });
     }
   };
 
-  // Optimistic-only updates; assumes single-admin usage. Revisit with multi-admin to refetch server state.
   const performClear = async (slug: string) => {
-    const prevItems = items;
-    setFetchState({ loading: true, error: null });
+    const prevItems = reportItems;
+    setReportFetchState({ loading: true, error: null });
+
     try {
       const response = await fetch(`${API_BASE}/${slug}`, {
         method: "DELETE",
         headers: { "x-admin-secret": secret },
       });
       if (!response.ok) {
-        setFetchState({
+        setReportFetchState({
           loading: false,
           error:
             response.status === 401
@@ -210,7 +345,7 @@ const AdminReportsPage: React.FC = () => {
         return;
       }
       const nowIso = new Date().toISOString();
-      setItems((current) =>
+      setReportItems((current) =>
         current.map((item) =>
           item.slug === slug
             ? {
@@ -223,11 +358,11 @@ const AdminReportsPage: React.FC = () => {
             : item,
         ),
       );
-      setFetchState({ loading: false, error: null });
+      setReportFetchState({ loading: false, error: null });
     } catch (error) {
       console.error(error);
-      setItems(prevItems);
-      setFetchState({
+      setReportItems(prevItems);
+      setReportFetchState({
         loading: false,
         error: "Failed to clear reports",
       });
@@ -242,7 +377,8 @@ const AdminReportsPage: React.FC = () => {
       <div>
         <h1 className="text-xl font-semibold text-foreground">Admin Reports</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Enter the admin secret to view reported slugs.
+          Enter the admin secret to review reported slugs and explore published
+          countdowns.
         </p>
       </div>
       <label className="block text-sm font-medium text-foreground">
@@ -272,181 +408,288 @@ const AdminReportsPage: React.FC = () => {
     );
   }
 
+  const renderReportsTable = () => (
+    <div className="overflow-hidden rounded-lg border border-border bg-card">
+      <div className="grid grid-cols-[2fr,1fr,2fr,1fr,1fr,1.2fr] gap-3 border-b border-border px-4 py-3 text-xs font-semibold uppercase text-muted-foreground">
+        <span>Slug</span>
+        <span>Reports</span>
+        <span>Last reason</span>
+        <span>Last reported</span>
+        <span>Status</span>
+        <span>Actions</span>
+      </div>
+      {reportItems.length === 0 ? (
+        <div className="px-4 py-6 text-sm text-muted-foreground">
+          {reportFetchState.loading
+            ? "Loading reports..."
+            : "No reports found."}
+        </div>
+      ) : (
+        <div className="divide-y divide-border">
+          {reportItems.map((item) => (
+            <div
+              key={item.slug}
+              className="grid grid-cols-[2fr,1fr,2fr,1fr,1fr,1.2fr] items-start gap-3 px-4 py-3 text-sm"
+            >
+              <div className="flex flex-col gap-1">
+                <a
+                  href={`/v/${item.slug}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="font-semibold text-primary underline-offset-2 hover:underline"
+                >
+                  {item.slug}
+                </a>
+                <span className="text-xs text-muted-foreground">
+                  {item.reviewed ? "Reviewed" : "Unreviewed"}
+                </span>
+              </div>
+              <span>{item.reportCount}</span>
+              <span className="line-clamp-2 text-muted-foreground">
+                {item.lastReason || "—"}
+              </span>
+              <span className="text-muted-foreground">
+                {formatDateTime(item.lastReportedAt)}
+              </span>
+              <div className="flex flex-col items-start gap-2">
+                <span
+                  className={`rounded-full px-2 py-1 text-xs ${
+                    item.reviewed
+                      ? "bg-emerald-900/40 text-emerald-100"
+                      : "bg-amber-900/40 text-amber-100"
+                  }`}
+                >
+                  {item.reviewed ? "Reviewed" : "Needs review"}
+                </span>
+              </div>
+              <div className="flex flex-col gap-2">
+                {!item.reviewed ? (
+                  <button
+                    type="button"
+                    onClick={() => markReviewed(item.slug)}
+                    className="rounded-md border border-border px-2 py-1 text-xs hover:bg-muted"
+                    disabled={reportFetchState.loading}
+                  >
+                    Mark reviewed
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  className="rounded-md border border-border px-2 py-1 text-xs hover:bg-muted"
+                  onClick={() =>
+                    setConfirmAction({
+                      type: "clear",
+                      slug: item.slug,
+                      view: "reports",
+                    })
+                  }
+                  disabled={reportFetchState.loading}
+                >
+                  Clear reports
+                </button>
+                <button
+                  type="button"
+                  className="rounded-md bg-destructive px-2 py-1 text-xs text-destructive-foreground hover:opacity-90"
+                  onClick={() =>
+                    setConfirmAction({
+                      type: "delete",
+                      slug: item.slug,
+                      view: "reports",
+                    })
+                  }
+                  disabled={reportFetchState.loading}
+                >
+                  Delete countdown
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
+  const renderPublishedTable = () => (
+    <div className="overflow-hidden rounded-lg border border-border bg-card">
+      <div className="grid grid-cols-[2fr,1.2fr,1.2fr,1.2fr,1fr,1.2fr] gap-3 border-b border-border px-4 py-3 text-xs font-semibold uppercase text-muted-foreground">
+        <span>Slug</span>
+        <span>Created</span>
+        <span>Expires</span>
+        <span>Target</span>
+        <span>Password</span>
+        <span>Actions</span>
+      </div>
+      {publishedItems.length === 0 ? (
+        <div className="px-4 py-6 text-sm text-muted-foreground">
+          {publishedFetchState.loading
+            ? "Loading published slugs..."
+            : "No published slugs yet."}
+        </div>
+      ) : (
+        <div className="divide-y divide-border">
+          {publishedItems.map((item) => (
+            <div
+              key={item.slug}
+              className="grid grid-cols-[2fr,1.2fr,1.2fr,1.2fr,1fr,1.2fr] items-start gap-3 px-4 py-3 text-sm"
+            >
+              <div className="flex flex-col gap-1">
+                <a
+                  href={`/v/${item.slug}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="font-semibold text-primary underline-offset-2 hover:underline"
+                >
+                  {item.slug}
+                </a>
+                <span className="text-xs text-muted-foreground">
+                  {item.requiresPassword ? "Password protected" : "Open access"}
+                </span>
+              </div>
+              <span className="text-muted-foreground">
+                {formatTimestamp(item.createdAt)}
+              </span>
+              <span className="text-muted-foreground">
+                {formatTimestamp(item.expiresAt)}
+              </span>
+              <span className="text-muted-foreground">
+                {formatTimestamp(item.timeMs)}
+              </span>
+              <span className="text-muted-foreground">
+                {item.requiresPassword ? "Yes" : "No"}
+              </span>
+              <div className="flex flex-col gap-2">
+                <button
+                  type="button"
+                  className="rounded-md border border-border px-2 py-1 text-xs hover:bg-muted"
+                  onClick={() =>
+                    setConfirmAction({
+                      type: "delete",
+                      slug: item.slug,
+                      view: "published",
+                    })
+                  }
+                  disabled={publishedFetchState.loading}
+                >
+                  Delete countdown
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <div className="min-h-screen bg-background px-4 py-10 text-foreground">
       <div className="mx-auto flex max-w-6xl flex-col gap-6">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-semibold">Admin Reports</h1>
-            <p className="text-sm text-muted-foreground">
-              Review reported slugs. Filter and mark items as reviewed.
-            </p>
+            <p className="text-sm text-muted-foreground">{viewDescription}</p>
           </div>
+          <a
+            href="/admin"
+            className="rounded-md border border-border px-3 py-2 text-sm text-foreground hover:bg-muted"
+          >
+            ← Back
+          </a>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card px-4 py-3 text-sm">
+          <span className="text-xs uppercase text-muted-foreground">View</span>
           <button
             type="button"
-            onClick={() => {
-              setSecret("");
-              if (typeof window !== "undefined") {
-                window.sessionStorage.removeItem("adminSecret");
-              }
-            }}
-            className="text-sm text-muted-foreground underline"
+            onClick={() => setView("reports")}
+            className={`rounded-md px-3 py-1 text-sm font-semibold ${
+              view === "reports"
+                ? "bg-primary text-primary-foreground"
+                : "border border-border bg-background text-foreground"
+            }`}
           >
-            Change secret
+            Reported slugs
+          </button>
+          <button
+            type="button"
+            onClick={() => setView("published")}
+            className={`rounded-md px-3 py-1 text-sm font-semibold ${
+              view === "published"
+                ? "bg-primary text-primary-foreground"
+                : "border border-border bg-background text-foreground"
+            }`}
+          >
+            Published slugs
           </button>
         </div>
 
-        <div className="flex flex-wrap gap-4 rounded-lg border border-border bg-card p-4 text-sm">
-          <label className="flex flex-col gap-1">
-            <span className="text-xs uppercase text-muted-foreground">
-              Since
-            </span>
-            <input
-              type="datetime-local"
-              value={sinceInput}
-              onChange={(event) => setSinceInput(event.target.value)}
-              className="rounded-md border border-border bg-background px-3 py-2"
-            />
-          </label>
-          <label className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={hideReviewed}
-              onChange={(event) => setHideReviewed(event.target.checked)}
-            />
-            <span className="text-sm text-foreground">Hide reviewed</span>
-          </label>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => loadReports({ reset: true })}
-              className="rounded-md bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground transition hover:opacity-90"
-              disabled={fetchState.loading}
-            >
-              Apply filters
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setSinceInput("");
-                setHideReviewed(false);
-                loadReports({ reset: true });
-              }}
-              className="rounded-md border border-border px-3 py-2 text-sm"
-              disabled={fetchState.loading}
-            >
-              Reset
-            </button>
+        {view === "reports" && (
+          <div className="flex flex-wrap gap-4 rounded-lg border border-border bg-card p-4 text-sm">
+            <label className="flex flex-col gap-1">
+              <span className="text-xs uppercase text-muted-foreground">
+                Since
+              </span>
+              <input
+                type="datetime-local"
+                value={sinceInput}
+                onChange={(event) => setSinceInput(event.target.value)}
+                className="rounded-md border border-border bg-background px-3 py-2"
+              />
+            </label>
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={hideReviewed}
+                onChange={(event) => setHideReviewed(event.target.checked)}
+              />
+              <span className="text-sm text-foreground">Hide reviewed</span>
+            </label>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => loadReports({ reset: true })}
+                className="rounded-md bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground transition hover:opacity-90"
+                disabled={reportFetchState.loading}
+              >
+                Apply filters
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setSinceInput("");
+                  setHideReviewed(false);
+                  loadReports({ reset: true });
+                }}
+                className="rounded-md border border-border px-3 py-2 text-sm"
+                disabled={reportFetchState.loading}
+              >
+                Reset
+              </button>
+            </div>
           </div>
-        </div>
+        )}
 
-        {fetchState.error ? (
+        {activeFetchState.error ? (
           <div className="rounded-md border border-red-500/50 bg-red-950/40 px-4 py-3 text-sm text-red-200">
-            {fetchState.error}
+            {activeFetchState.error}
           </div>
         ) : null}
 
-        <div className="overflow-hidden rounded-lg border border-border bg-card">
-          <div className="grid grid-cols-[2fr,1fr,2fr,1fr,1fr,1.2fr] gap-3 border-b border-border px-4 py-3 text-xs font-semibold uppercase text-muted-foreground">
-            <span>Slug</span>
-            <span>Reports</span>
-            <span>Last reason</span>
-            <span>Last reported</span>
-            <span>Status</span>
-            <span>Actions</span>
-          </div>
-          {items.length === 0 ? (
-            <div className="px-4 py-6 text-sm text-muted-foreground">
-              {fetchState.loading ? "Loading reports..." : "No reports found."}
-            </div>
-          ) : (
-            <div className="divide-y divide-border">
-              {items.map((item) => (
-                <div
-                  key={item.slug}
-                  className="grid grid-cols-[2fr,1fr,2fr,1fr,1fr,1.2fr] items-start gap-3 px-4 py-3 text-sm"
-                >
-                  <div className="flex flex-col gap-1">
-                    <a
-                      href={`/v/${item.slug}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="font-semibold text-primary underline-offset-2 hover:underline"
-                    >
-                      {item.slug}
-                    </a>
-                    <span className="text-xs text-muted-foreground">
-                      {item.reviewed ? "Reviewed" : "Unreviewed"}
-                    </span>
-                  </div>
-                  <span>{item.reportCount}</span>
-                  <span className="line-clamp-2 text-muted-foreground">
-                    {item.lastReason || "—"}
-                  </span>
-                  <span className="text-muted-foreground">
-                    {formatDateTime(item.lastReportedAt)}
-                  </span>
-                  <div className="flex flex-col items-start gap-2">
-                    <span
-                      className={`rounded-full px-2 py-1 text-xs ${
-                        item.reviewed
-                          ? "bg-emerald-900/40 text-emerald-100"
-                          : "bg-amber-900/40 text-amber-100"
-                      }`}
-                    >
-                      {item.reviewed ? "Reviewed" : "Needs review"}
-                    </span>
-                  </div>
-                  <div className="flex flex-col gap-2">
-                    {!item.reviewed ? (
-                      <button
-                        type="button"
-                        onClick={() => markReviewed(item.slug)}
-                        className="rounded-md border border-border px-2 py-1 text-xs hover:bg-muted"
-                        disabled={fetchState.loading}
-                      >
-                        Mark reviewed
-                      </button>
-                    ) : null}
-                    <button
-                      type="button"
-                      className="rounded-md border border-border px-2 py-1 text-xs hover:bg-muted"
-                      onClick={() =>
-                        setConfirmAction({ type: "clear", slug: item.slug })
-                      }
-                      disabled={fetchState.loading}
-                    >
-                      Clear reports
-                    </button>
-                    <button
-                      type="button"
-                      className="rounded-md bg-destructive px-2 py-1 text-xs text-destructive-foreground hover:opacity-90"
-                      onClick={() =>
-                        setConfirmAction({ type: "delete", slug: item.slug })
-                      }
-                      disabled={fetchState.loading}
-                    >
-                      Delete countdown
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+        {view === "reports" ? renderReportsTable() : renderPublishedTable()}
 
         <div className="flex items-center justify-between text-sm text-muted-foreground">
           <span>
-            Showing {items.length} {items.length === 1 ? "item" : "items"}
+            Showing {activeItems.length} of {activeTotal}{" "}
+            {view === "reports" ? "reported slug" : "published slug"}
+            {activeTotal === 1 ? "" : "s"}
           </span>
-          {nextCursor ? (
+          {activeNextCursor ? (
             <button
               type="button"
-              onClick={() => loadReports({ reset: false })}
+              onClick={loadNextPage}
               className="rounded-md border border-border px-3 py-2 text-sm text-foreground hover:bg-muted"
-              disabled={fetchState.loading}
+              disabled={activeFetchState.loading}
             >
-              {fetchState.loading ? "Loading..." : "Load more"}
+              {activeFetchState.loading ? "Loading..." : "Load more"}
             </button>
           ) : null}
         </div>
@@ -473,7 +716,7 @@ const AdminReportsPage: React.FC = () => {
                 type="button"
                 className="rounded-md border border-border px-3 py-2 text-sm"
                 onClick={() => setConfirmAction(null)}
-                disabled={fetchState.loading}
+                disabled={activeFetchState.loading}
               >
                 Cancel
               </button>
@@ -486,13 +729,13 @@ const AdminReportsPage: React.FC = () => {
                 }`}
                 onClick={() => {
                   if (confirmAction.type === "delete") {
-                    performDelete(confirmAction.slug);
+                    performDelete(confirmAction.slug, confirmAction.view);
                   } else {
                     performClear(confirmAction.slug);
                   }
                   setConfirmAction(null);
                 }}
-                disabled={fetchState.loading}
+                disabled={activeFetchState.loading}
               >
                 Confirm
               </button>

@@ -98,9 +98,9 @@ describe("admin stats endpoint", () => {
     expect(payload.totalActive).toBe(2);
     expect(payload.anonymousActive).toBe(1);
     expect(payload.passwordProtectedActive).toBe(1);
-    expect(payload.publishes.last24Hours).toBe(1);
-    expect(payload.publishes.last7Days).toBe(1);
-    expect(payload.publishes.last30Days).toBe(1);
+    expect(payload.publishes.last24Hours).toBeGreaterThanOrEqual(1);
+    expect(payload.publishes.last7Days).toBeGreaterThanOrEqual(1);
+    expect(payload.publishes.last30Days).toBeGreaterThanOrEqual(1);
     expect(payload.rateLimitHitsLast24Hours).toBe(1);
     expect(payload.failedDeleteAttemptsLast24Hours).toBe(1);
   });

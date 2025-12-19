@@ -1,4 +1,9 @@
 describe("Publishable slug flow", () => {
+  beforeEach(() => {
+    // Reset stored blobs and rate-limit state between runs.
+    cy.exec("rm -rf .netlify/published-data /tmp/.netlify/published-data");
+  });
+
   it("publishes with password, loads via /v, and deletes the slug", () => {
     const baseUrl = (Cypress.config("baseUrl") as string).replace(/\/$/, "");
     const slug = `e2e-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;

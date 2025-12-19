@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import React from "react";
 import { vi } from "vitest";
 import AdminReportsPage from "./AdminReportsPage";
@@ -30,6 +36,26 @@ describe("AdminReportsPage", () => {
   it("prompts for secret when none is stored", () => {
     render(<AdminReportsPage />);
     expect(screen.getByText(/enter the admin secret/i)).toBeInTheDocument();
+  });
+
+  it("accepts secret entry and loads reports without crashing", async () => {
+    const fetchMock = vi.spyOn(global, "fetch").mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => mockReportsResponse,
+    } as unknown as Response);
+
+    render(<AdminReportsPage />);
+
+    fireEvent.change(screen.getByLabelText(/admin secret/i), {
+      target: { value: "secret" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+
+    await waitFor(() =>
+      expect(screen.getByText("test-slug")).toBeInTheDocument(),
+    );
+    expect(fetchMock).toHaveBeenCalled();
   });
 
   it("loads reports when secret is present", async () => {
@@ -73,5 +99,115 @@ describe("AdminReportsPage", () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
     const url = fetchMock.mock.calls[0][0] as string;
     expect(url).toContain("reviewed=false");
+  });
+
+  it("loads published view on toggle and hits the correct endpoint", async () => {
+    window.sessionStorage.setItem("adminSecret", "secret");
+    const publishedSlug = "published-slug";
+    const mockPublishedResponse = {
+      items: [
+        {
+          slug: publishedSlug,
+          createdAt: 1,
+          timeMs: 1000,
+          expiresAt: null,
+          published: true,
+          requiresPassword: false,
+        },
+      ],
+      nextCursor: null,
+      total: 1,
+    };
+
+    const fetchMock = vi
+      .spyOn(global, "fetch")
+      .mockImplementation(async (resource) => {
+        const url =
+          typeof resource === "string"
+            ? resource
+            : ((resource as { url?: string }).url ?? "");
+        if (url.startsWith("/api/admin/reports")) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => mockReportsResponse,
+          } as unknown as Response;
+        }
+        if (url.startsWith("/api/admin/published")) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => mockPublishedResponse,
+          } as unknown as Response;
+        }
+        throw new Error(`Unexpected fetch ${url}`);
+      });
+
+    render(<AdminReportsPage />);
+
+    await waitFor(() =>
+      expect(screen.getByText("test-slug")).toBeInTheDocument(),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /published slugs/i }));
+
+    await waitFor(() =>
+      expect(screen.getByText(publishedSlug)).toBeInTheDocument(),
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/api/admin/published"),
+      expect.objectContaining({
+        method: "GET",
+        headers: { "x-admin-secret": "secret" },
+      }),
+    );
+  });
+
+  it("clears reports when confirming the action", async () => {
+    window.sessionStorage.setItem("adminSecret", "secret");
+    const fetchMock = vi
+      .spyOn(global, "fetch")
+      .mockImplementation(async (resource, init) => {
+        const url =
+          typeof resource === "string"
+            ? resource
+            : ((resource as { url?: string }).url ?? "");
+        if (url.startsWith("/api/admin/reports")) {
+          if (init?.method === "DELETE") {
+            return { ok: true, status: 200 } as unknown as Response;
+          }
+          return {
+            ok: true,
+            status: 200,
+            json: async () => mockReportsResponse,
+          } as unknown as Response;
+        }
+        throw new Error(`Unexpected fetch ${url}`);
+      });
+
+    render(<AdminReportsPage />);
+
+    await waitFor(() =>
+      expect(screen.getByText("test-slug")).toBeInTheDocument(),
+    );
+    const reportRow = screen
+      .getByText("test-slug")
+      .closest("div.grid") as HTMLElement;
+    expect(within(reportRow).getByText(/needs review/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /clear reports/i }));
+    fireEvent.click(screen.getByRole("button", { name: /confirm/i }));
+
+    await waitFor(() =>
+      expect(
+        within(reportRow).queryByText(/needs review/i),
+      ).not.toBeInTheDocument(),
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/api/admin/reports/test-slug"),
+      expect.objectContaining({ method: "DELETE" }),
+    );
   });
 });

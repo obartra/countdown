@@ -225,6 +225,13 @@ const AdminReportsPage: React.FC = () => {
     }
   }, [hasSecret, loadPublished, publishedItems.length, view]);
 
+  const viewDescription = useMemo(() => {
+    if (view === "reports") {
+      return "Review reported slugs. Filter, mark reviewed, and clear or delete problem entries.";
+    }
+    return "Browse every published countdown slug and delete protected content as needed.";
+  }, [view]);
+
   const activeFetchState =
     view === "reports" ? reportFetchState : publishedFetchState;
   const activeItems = view === "reports" ? reportItems : publishedItems;
@@ -288,7 +295,7 @@ const AdminReportsPage: React.FC = () => {
     const prevPublishedItems = publishedItems;
     updateFetchStateForView(actionView, { loading: true, error: null });
     try {
-      const response = await fetch(`${PUBLISHED_API_BASE}/${slug}`, {
+      const response = await fetch(`/api/published/${slug}`, {
         method: "DELETE",
         headers: { "x-admin-override": secret },
       });
@@ -573,13 +580,6 @@ const AdminReportsPage: React.FC = () => {
     </div>
   );
 
-  const viewDescription = useMemo(() => {
-    if (view === "reports") {
-      return "Review reported slugs. Filter, mark reviewed, and clear or delete problem entries.";
-    }
-    return "Browse every published countdown slug and delete protected content as needed.";
-  }, [view]);
-
   return (
     <div className="min-h-screen bg-background px-4 py-10 text-foreground">
       <div className="mx-auto flex max-w-6xl flex-col gap-6">
@@ -588,18 +588,12 @@ const AdminReportsPage: React.FC = () => {
             <h1 className="text-2xl font-semibold">Admin Reports</h1>
             <p className="text-sm text-muted-foreground">{viewDescription}</p>
           </div>
-          <button
-            type="button"
-            onClick={() => {
-              setSecret("");
-              if (typeof window !== "undefined") {
-                window.sessionStorage.removeItem("adminSecret");
-              }
-            }}
-            className="text-sm text-muted-foreground underline"
+          <a
+            href="/admin"
+            className="rounded-md border border-border px-3 py-2 text-sm text-foreground hover:bg-muted"
           >
-            Change secret
-          </button>
+            ← Back
+          </a>
         </div>
 
         <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card px-4 py-3 text-sm">

@@ -12,6 +12,7 @@ import "./style.css";
 
 const EditPage = lazy(() => import("./EditPage"));
 const AdminReportsPage = lazy(() => import("./AdminReportsPage"));
+const AdminPage = lazy(() => import("./AdminPage"));
 
 document.documentElement.classList.add("h-full");
 document.body.classList.add("min-h-screen", "antialiased");
@@ -134,6 +135,17 @@ export const Root = () => {
 
   const isAdminReports =
     typeof window !== "undefined" && pathname.startsWith("/admin/reports");
+  const isAdminRoot =
+    typeof window !== "undefined" &&
+    (pathname === "/admin" || pathname === "/admin/");
+
+  if (isAdminRoot) {
+    return (
+      <Suspense fallback={<LoadingScreen message="Loading admin..." />}>
+        <AdminPage />
+      </Suspense>
+    );
+  }
 
   if (isAdminReports) {
     return (

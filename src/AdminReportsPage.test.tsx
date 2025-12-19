@@ -38,6 +38,26 @@ describe("AdminReportsPage", () => {
     expect(screen.getByText(/enter the admin secret/i)).toBeInTheDocument();
   });
 
+  it("accepts secret entry and loads reports without crashing", async () => {
+    const fetchMock = vi.spyOn(global, "fetch").mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => mockReportsResponse,
+    } as unknown as Response);
+
+    render(<AdminReportsPage />);
+
+    fireEvent.change(screen.getByLabelText(/admin secret/i), {
+      target: { value: "secret" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+
+    await waitFor(() =>
+      expect(screen.getByText("test-slug")).toBeInTheDocument(),
+    );
+    expect(fetchMock).toHaveBeenCalled();
+  });
+
   it("loads reports when secret is present", async () => {
     window.sessionStorage.setItem("adminSecret", "secret");
     const fetchMock = vi.spyOn(global, "fetch").mockResolvedValue({
@@ -137,7 +157,10 @@ describe("AdminReportsPage", () => {
 
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringContaining("/api/admin/published"),
-      expect.objectContaining({ method: "GET" }),
+      expect.objectContaining({
+        method: "GET",
+        headers: { "x-admin-secret": "secret" },
+      }),
     );
   });
 

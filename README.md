@@ -64,7 +64,10 @@ CI runs `pnpm bundle:check` automatically after `pnpm build`.
 - `DELETE /api/admin/reports/:slug` — Clear reports (optional `purgeBlobs=true`)
 - `GET /admin/stats` — Admin stats (requires `x-admin-secret`)
 
-Admin UI lives at `/admin/reports`, toggles between reported and published slugs, and calls the `/api/admin/reports*` endpoints.
+Admin UI:
+
+- `/admin` — landing hub for admin tools (requires admin secret, includes a Settings card to clear the session secret)
+- `/admin/reports` — toggles between reported and published slugs, calls `/api/admin/reports*` and `/api/admin/published`
 
 ## Dev setup
 

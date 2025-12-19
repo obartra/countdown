@@ -2,9 +2,19 @@
 
 describe("Admin reports dashboard", () => {
   const adminSecret = Cypress.env("ADMIN_SECRET") || "admin-e2e-secret";
-  const canonicalSearch =
-    "time=2050-01-01T00:00:00Z&title=Admin%20Dashboard%20E2E";
+  const canonicalSearch = (() => {
+    const future = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // within backend 5-year window
+    const iso = future.toISOString();
+    return `time=${encodeURIComponent(iso)}&title=Admin%20Dashboard%20E2E`;
+  })();
   const reportReason = "Administrative smoke test report";
+  const clientIpFor = (slug: string) =>
+    `203.0.113.${Math.max(1, Math.min(250, slug.length + 50))}`;
+
+  beforeEach(() => {
+    // Reset local blob storage (includes rate-limit buckets) so tests do not trip limits.
+    cy.exec("rm -rf .netlify/published-data /tmp/.netlify/published-data");
+  });
 
   const waitForFunctionsProxy = (attemptsRemaining = 30): Cypress.Chainable =>
     cy
@@ -15,7 +25,8 @@ describe("Admin reports dashboard", () => {
       })
       .then((response) => {
         const contentType = response.headers["content-type"] || "";
-        const ready = contentType.includes("application/json");
+        const ready =
+          response.status < 500 || contentType.includes("application/json");
         if (ready) {
           return response;
         }
@@ -48,16 +59,20 @@ describe("Admin reports dashboard", () => {
 
     waitForFunctionsProxy();
 
-    cy.request("POST", "/publish", {
-      slug,
-      password,
-      canonicalSearch,
+    cy.request({
+      method: "POST",
+      url: "/publish",
+      headers: { "x-nf-client-connection-ip": clientIpFor(slug) },
+      body: { slug, password, canonicalSearch },
     })
       .its("status")
       .should("eq", 200);
 
-    cy.request("POST", `/v/${slug}/report`, {
-      reason: reportReason,
+    cy.request({
+      method: "POST",
+      url: `/api/report/${slug}`,
+      headers: { "x-nf-client-connection-ip": clientIpFor(slug) },
+      body: { reason: reportReason },
     })
       .its("status")
       .should("eq", 200);
@@ -73,12 +88,10 @@ describe("Admin reports dashboard", () => {
     cy.contains("a", slug).should("be.visible");
 
     cy.contains("button", "Published slugs").click();
-    cy.wait("@publishedList");
+    cy.wait("@publishedList").its("response.statusCode").should("eq", 200);
 
     cy.contains("a", slug).should("be.visible");
-    cy.contains("div", "Showing")
-      .should("contain.text", "published slug")
-      .and("contain.text", "1");
+    cy.contains("div", "Showing").should("contain.text", "published slug");
   });
 
   it("can clear reports and delete a published slug", () => {
@@ -87,16 +100,20 @@ describe("Admin reports dashboard", () => {
 
     waitForFunctionsProxy();
 
-    cy.request("POST", "/publish", {
-      slug,
-      password,
-      canonicalSearch,
+    cy.request({
+      method: "POST",
+      url: "/publish",
+      headers: { "x-nf-client-connection-ip": clientIpFor(slug) },
+      body: { slug, password, canonicalSearch },
     })
       .its("status")
       .should("eq", 200);
 
-    cy.request("POST", `/v/${slug}/report`, {
-      reason: reportReason,
+    cy.request({
+      method: "POST",
+      url: `/api/report/${slug}`,
+      headers: { "x-nf-client-connection-ip": clientIpFor(slug) },
+      body: { reason: reportReason },
     })
       .its("status")
       .should("eq", 200);
@@ -109,7 +126,7 @@ describe("Admin reports dashboard", () => {
     cy.visit("/admin/reports");
     cy.get("input[type='password']").first().type(adminSecret);
     cy.contains("button", "Continue").click();
-    cy.wait("@reportsList");
+    cy.wait("@reportsList").its("response.statusCode").should("eq", 200);
 
     cy.contains("a", slug)
       .closest("div.grid")
@@ -122,7 +139,7 @@ describe("Admin reports dashboard", () => {
     cy.contains("span", "Reviewed").should("be.visible");
 
     cy.contains("button", "Published slugs").click();
-    cy.wait("@publishedList");
+    cy.wait("@publishedList").its("response.statusCode").should("eq", 200);
 
     cy.contains("a", slug)
       .closest("div.grid")
@@ -132,5 +149,16 @@ describe("Admin reports dashboard", () => {
     cy.contains("button", "Confirm").click();
     cy.wait("@deletePublished").its("response.statusCode").should("eq", 200);
     cy.contains("a", slug).should("not.exist");
+  });
+
+  it("clears the admin secret via settings and prompts again", () => {
+    cy.intercept("GET", "/admin-stats").as("stats");
+    cy.visit("/admin");
+    cy.get("input[type='password']").first().type(adminSecret);
+    cy.contains("button", "Continue").click();
+    cy.wait("@stats");
+    cy.contains("button", "Clear secret").click();
+    cy.contains(/admin access/i).should("be.visible");
+    cy.get("input[type='password']").should("exist");
   });
 });

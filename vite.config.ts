@@ -60,6 +60,18 @@ const adminReportsRewrite = (pathStr: string) => {
   return `/admin-reports${query ? `?${query}` : ""}`;
 };
 
+const adminPublishedRewrite = (pathStr: string) => {
+  const [pathname, query] = pathStr.split("?");
+  const suffix = pathname.replace(/^\/admin\/published/, "");
+  if (suffix && suffix !== "/") {
+    const slug = suffix.replace(/^\/+/, "");
+    return `/admin-published?slug=${encodeURIComponent(slug)}${
+      query ? `&${query}` : ""
+    }`;
+  }
+  return `/admin-published${query ? `?${query}` : ""}`;
+};
+
 export default defineConfig(() => ({
   plugins: [react(), serveDocsEmojis()],
   base: "/",
@@ -76,6 +88,9 @@ export default defineConfig(() => ({
       "/admin-stats": functionsProxy(() => "/admin-stats"),
       "/api/admin/reports": functionsProxy((pathStr) =>
         adminReportsRewrite(pathStr.replace(/^\/api/, "")),
+      ),
+      "/api/admin/published": functionsProxy((pathStr) =>
+        adminPublishedRewrite(pathStr.replace(/^\/api/, "")),
       ),
       "/api/published": functionsProxy((path) => rewritePublishedApiPath(path)),
       "/api/report": functionsProxy((path) => {

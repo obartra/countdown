@@ -42,6 +42,7 @@ describe("AdminReportsPage", () => {
     const fetchMock = vi.spyOn(global, "fetch").mockResolvedValue({
       ok: true,
       status: 200,
+      text: async () => "",
       json: async () => mockReportsResponse,
     } as unknown as Response);
 
@@ -63,6 +64,7 @@ describe("AdminReportsPage", () => {
     const fetchMock = vi.spyOn(global, "fetch").mockResolvedValue({
       ok: true,
       status: 200,
+      text: async () => "",
       json: async () => mockReportsResponse,
     } as unknown as Response);
 
@@ -72,9 +74,12 @@ describe("AdminReportsPage", () => {
       expect(screen.getByText("test-slug")).toBeInTheDocument(),
     );
     expect(fetchMock).toHaveBeenCalled();
-    const url = (fetchMock.mock.calls[0][0] as string) ?? "";
-    expect(url.startsWith("/api/admin/reports")).toBe(true);
-    expect(fetchMock.mock.calls[0][1]).toMatchObject({
+    const calls = fetchMock.mock.calls.map((call) => (call[0] as string) ?? "");
+    const reportsCallIndex = calls.findIndex((url) =>
+      url.startsWith("/api/admin/reports"),
+    );
+    expect(reportsCallIndex).toBeGreaterThanOrEqual(0);
+    expect(fetchMock.mock.calls[reportsCallIndex][1]).toMatchObject({
       headers: { "x-admin-secret": "secret" },
     });
   });
@@ -84,6 +89,7 @@ describe("AdminReportsPage", () => {
     const fetchMock = vi.spyOn(global, "fetch").mockResolvedValue({
       ok: true,
       status: 200,
+      text: async () => "",
       json: async () => mockReportsResponse,
     } as unknown as Response);
 
@@ -126,10 +132,18 @@ describe("AdminReportsPage", () => {
           typeof resource === "string"
             ? resource
             : ((resource as { url?: string }).url ?? "");
+        if (url.startsWith("/admin-stats")) {
+          return {
+            ok: true,
+            status: 200,
+            text: async () => "",
+          } as unknown as Response;
+        }
         if (url.startsWith("/api/admin/reports")) {
           return {
             ok: true,
             status: 200,
+            text: async () => "",
             json: async () => mockReportsResponse,
           } as unknown as Response;
         }
@@ -137,6 +151,7 @@ describe("AdminReportsPage", () => {
           return {
             ok: true,
             status: 200,
+            text: async () => "",
             json: async () => mockPublishedResponse,
           } as unknown as Response;
         }
@@ -173,6 +188,13 @@ describe("AdminReportsPage", () => {
           typeof resource === "string"
             ? resource
             : ((resource as { url?: string }).url ?? "");
+        if (url.startsWith("/admin-stats")) {
+          return {
+            ok: true,
+            status: 200,
+            text: async () => "",
+          } as unknown as Response;
+        }
         if (url.startsWith("/api/admin/reports")) {
           if (init?.method === "DELETE") {
             return { ok: true, status: 200 } as unknown as Response;
@@ -180,6 +202,7 @@ describe("AdminReportsPage", () => {
           return {
             ok: true,
             status: 200,
+            text: async () => "",
             json: async () => mockReportsResponse,
           } as unknown as Response;
         }

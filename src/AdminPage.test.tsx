@@ -36,6 +36,7 @@ describe("AdminPage", () => {
     const fetchMock = vi.spyOn(global, "fetch").mockResolvedValue({
       ok: true,
       status: 200,
+      text: async () => "",
       json: async () => mockStats,
     } as unknown as Response);
 
@@ -63,6 +64,7 @@ describe("AdminPage", () => {
     const fetchMock = vi.spyOn(global, "fetch").mockResolvedValue({
       ok: true,
       status: 200,
+      text: async () => "",
       json: async () => mockStats,
     } as unknown as Response);
 
@@ -79,6 +81,7 @@ describe("AdminPage", () => {
     const fetchMock = vi.spyOn(global, "fetch").mockResolvedValue({
       ok: true,
       status: 200,
+      text: async () => "",
       json: async () => mockStats,
     } as unknown as Response);
 
@@ -99,6 +102,7 @@ describe("AdminPage", () => {
     const fetchMock = vi.spyOn(global, "fetch").mockResolvedValue({
       ok: true,
       status: 200,
+      text: async () => "",
       json: async () => mockStats,
     } as unknown as Response);
     const openSpy = vi.spyOn(window, "open").mockReturnValue(null);
@@ -132,11 +136,24 @@ describe("AdminPage", () => {
 
   it("shows an error when stats JSON cannot be loaded", async () => {
     window.sessionStorage.setItem("adminSecret", "secret");
-    vi.spyOn(global, "fetch").mockResolvedValue({
-      ok: false,
-      status: 401,
-      json: async () => ({}),
-    } as unknown as Response);
+    let callCount = 0;
+    vi.spyOn(global, "fetch").mockImplementation(async () => {
+      callCount += 1;
+      if (callCount <= 2) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () => "",
+          json: async () => mockStats,
+        } as unknown as Response;
+      }
+      return {
+        ok: false,
+        status: 401,
+        text: async () => "",
+        json: async () => ({}),
+      } as unknown as Response;
+    });
 
     render(<AdminPage />);
 

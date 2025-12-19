@@ -45,8 +45,8 @@ describe("countdownUrl canonicalization", () => {
 
   it("omits default theme colors only when both are provided", () => {
     const params = buildCanonicalCountdownSearchParams({
-      bgcolor: "#0B1021",
-      color: "#F2F5FF",
+      bgcolor: "#111113",
+      color: "#EDEEF0",
     });
 
     expect(params.has("bgcolor")).toBe(false);
@@ -55,10 +55,10 @@ describe("countdownUrl canonicalization", () => {
 
   it("keeps a single bgcolor override even if it equals the default theme background", () => {
     const params = buildCanonicalCountdownSearchParams({
-      bgcolor: "#0B1021",
+      bgcolor: "#111113",
     });
 
-    expect(params.get("bgcolor")).toBe("#0b1021");
+    expect(params.get("bgcolor")).toBe("#111113");
     expect(params.has("color")).toBe(false);
   });
 

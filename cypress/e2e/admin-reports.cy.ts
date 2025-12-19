@@ -161,4 +161,29 @@ describe("Admin reports dashboard", () => {
     cy.contains(/admin access/i).should("be.visible");
     cy.get("input[type='password']").should("exist");
   });
+
+  it("does not render the admin dashboard when the secret is invalid", () => {
+    cy.intercept("GET", "/admin-stats", {
+      statusCode: 401,
+      body: { error: "Invalid admin secret" },
+    }).as("adminStats");
+
+    cy.visit("/admin", {
+      onBeforeLoad(win) {
+        win.sessionStorage.clear();
+      },
+    });
+
+    cy.get("input[type='password']").first().type("wrong-secret");
+    cy.contains("button", "Continue").click();
+    cy.wait("@adminStats");
+
+    cy.contains(/invalid admin secret/i).should("be.visible");
+    cy.contains(/admin access/i).should("be.visible");
+    cy.contains("h2", "Reports & Published").should("not.exist");
+    cy.contains("button", "Clear secret").should("not.exist");
+    cy.window().then((win) => {
+      expect(win.sessionStorage.getItem("adminSecret")).to.eq(null);
+    });
+  });
 });

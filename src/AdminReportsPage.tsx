@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useAdminAuth } from "./lib/useAdminAuth";
 
 type AdminView = "reports" | "published";
 
@@ -58,16 +59,16 @@ const formatTimestamp = (value?: number | null) =>
     : "—";
 
 const AdminReportsPage: React.FC = () => {
-  const [secretInput, setSecretInput] = useState<string>(() => {
-    if (typeof window === "undefined") return "";
-    return window.sessionStorage.getItem("adminSecret") ?? "";
-  });
-  const [secret, setSecret] = useState<string>(() => {
-    if (typeof window === "undefined") return "";
-    return window.sessionStorage.getItem("adminSecret") ?? "";
-  });
+  const {
+    secret,
+    secretInput,
+    setSecretInput,
+    status: authStatus,
+    error: authError,
+    hasSecret,
+    verify: verifySecret,
+  } = useAdminAuth();
   const [view, setView] = useState<AdminView>("reports");
-
   const [reportItems, setReportItems] = useState<ReportItem[]>([]);
   const [publishedItems, setPublishedItems] = useState<PublishedItem[]>([]);
   const [reportNextCursor, setReportNextCursor] = useState<string | null>(null);
@@ -91,8 +92,6 @@ const AdminReportsPage: React.FC = () => {
     slug: string;
     view: AdminView;
   } | null>(null);
-
-  const hasSecret = secret.trim().length > 0;
 
   const updateFetchStateForView = (
     targetView: AdminView,
@@ -243,13 +242,9 @@ const AdminReportsPage: React.FC = () => {
       ? () => loadReports({ reset: false })
       : () => loadPublished({ reset: false });
 
-  const handleSubmitSecret = (event: React.FormEvent) => {
+  const handleSubmitSecret = async (event: React.FormEvent) => {
     event.preventDefault();
-    const trimmed = secretInput.trim();
-    setSecret(trimmed);
-    if (typeof window !== "undefined") {
-      window.sessionStorage.setItem("adminSecret", trimmed);
-    }
+    await verifySecret(secretInput);
   };
 
   const markReviewed = async (slug: string) => {
@@ -391,11 +386,15 @@ const AdminReportsPage: React.FC = () => {
           autoComplete="current-password"
         />
       </label>
+      {authError ? (
+        <p className="text-sm text-destructive">{authError}</p>
+      ) : null}
       <button
         type="submit"
+        disabled={authStatus === "pending"}
         className="inline-flex items-center rounded-md bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground transition hover:opacity-90"
       >
-        Continue
+        {authStatus === "pending" ? "Verifying..." : "Continue"}
       </button>
     </form>
   );

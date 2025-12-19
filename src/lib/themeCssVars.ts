@@ -1,4 +1,4 @@
-import { themeMap, type ThemeDefinition } from "../themes";
+import { DEFAULT_THEME_KEY, themeMap, type ThemeDefinition } from "../themes";
 
 export type ThemeTokens = Pick<
   ThemeDefinition,
@@ -197,7 +197,7 @@ export const resolveThemeTokens = (input: {
   const backgroundRgb = parseColor(input.backgroundColor);
   const textRgb = parseColor(input.textColor);
   if (!backgroundRgb || !textRgb) {
-    const fallbackTheme = themeMap.get("midnight");
+    const fallbackTheme = themeMap.get(DEFAULT_THEME_KEY);
     if (fallbackTheme) return fallbackTheme;
     return themeMap.values().next().value as ThemeDefinition;
   }

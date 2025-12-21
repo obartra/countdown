@@ -36,6 +36,7 @@
   },
   "homepage": "https://github.com/obartra/countdown#readme",
   "dependencies": {
+    "@netlify/blobs": "^10.4.4",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
     "handlebars": "^4.7.8",

@@ -2,6 +2,7 @@ import type { Handler } from "@netlify/functions";
 import { storageClient } from "./lib/storage";
 import { listDirectory, readJsonBlob } from "./lib/blobStorage";
 import { checkAdminAuth } from "./lib/adminAuth";
+import { ensureBlobsEnvironment } from "./lib/blobsEnvironment";
 
 const MS_IN_HOUR = 60 * 60 * 1000;
 const MS_IN_DAY = 24 * MS_IN_HOUR;
@@ -54,6 +55,7 @@ const collectLogEntries = async (sinceMs: number) => {
 };
 
 export const handler: Handler = async (event) => {
+  ensureBlobsEnvironment(event);
   if (event.httpMethod !== "GET") {
     return methodNotAllowed();
   }

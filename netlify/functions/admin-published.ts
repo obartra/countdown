@@ -1,6 +1,7 @@
 import type { Handler } from "@netlify/functions";
 import { storageClient, type PublicationMeta } from "./lib/storage";
 import { checkAdminAuth } from "./lib/adminAuth";
+import { ensureBlobsEnvironment } from "./lib/blobsEnvironment";
 
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 200;
@@ -79,6 +80,7 @@ const normalizeMetaForResponse = (meta: PublicationMeta) => ({
 });
 
 export const handler: Handler = async (event) => {
+  ensureBlobsEnvironment(event);
   if (event.httpMethod !== "GET") {
     return methodNotAllowed();
   }

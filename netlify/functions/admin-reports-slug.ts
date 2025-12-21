@@ -7,6 +7,7 @@ import {
 import { deleteBlob, listDirectory, writeJsonBlob } from "./lib/blobStorage";
 import { logAdminAction } from "./lib/logger";
 import { checkAdminAuth } from "./lib/adminAuth";
+import { ensureBlobsEnvironment } from "./lib/blobsEnvironment";
 
 const jsonResponse = (
   statusCode: number,
@@ -28,6 +29,7 @@ const badRequest = (message: string) => jsonResponse(400, { error: message });
 const notFound = () => jsonResponse(404, { error: "Not found" });
 
 export const handler: Handler = async (event) => {
+  ensureBlobsEnvironment(event);
   if (event.httpMethod !== "PATCH" && event.httpMethod !== "DELETE") {
     return methodNotAllowed();
   }

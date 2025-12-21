@@ -9,6 +9,7 @@ import {
   type RateLimitStatus,
 } from "./lib/rateLimit";
 import { logPublish } from "./lib/logger";
+import { ensureBlobsEnvironment } from "./lib/blobsEnvironment";
 
 const MAX_FUTURE_MS = 5 * 365 * 24 * 60 * 60 * 1000;
 const ANON_SLUG_TTL_MS = 30 * 24 * 60 * 60 * 1000;
@@ -138,6 +139,7 @@ const rateLimitExceeded = (status: RateLimitStatus, message: string) => {
 };
 
 export const handler: Handler = async (event) => {
+  ensureBlobsEnvironment(event);
   if (event.httpMethod !== "POST") {
     return methodNotAllowed();
   }

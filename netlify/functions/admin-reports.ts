@@ -5,6 +5,7 @@ import {
 } from "./lib/reportIndex";
 import { listDirectory, readJsonBlob, writeJsonBlob } from "./lib/blobStorage";
 import { checkAdminAuth } from "./lib/adminAuth";
+import { ensureBlobsEnvironment } from "./lib/blobsEnvironment";
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 200;
 
@@ -130,6 +131,7 @@ const sortEntries = (entries: ReportIndexEntry[]) => {
 };
 
 export const handler: Handler = async (event) => {
+  ensureBlobsEnvironment(event);
   if (event.httpMethod !== "GET") {
     return methodNotAllowed();
   }

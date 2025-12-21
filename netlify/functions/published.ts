@@ -9,6 +9,7 @@ import {
 } from "./lib/rateLimit";
 import { logAdminAction, logDelete } from "./lib/logger";
 import { checkAdminAuth } from "./lib/adminAuth";
+import { ensureBlobsEnvironment } from "./lib/blobsEnvironment";
 
 type HandlerEvent = Parameters<Handler>[0];
 
@@ -64,6 +65,7 @@ const parseJsonBody = <T extends { password?: string }>(
 };
 
 const handler: Handler = async (event) => {
+  ensureBlobsEnvironment(event);
   const slugParam = event.queryStringParameters?.slug;
   if (!slugParam) {
     return notFound();

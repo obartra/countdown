@@ -1,6 +1,7 @@
 import type { Handler } from "@netlify/functions";
 import { storageClient } from "./lib/storage";
 import { logCleanup } from "./lib/logger";
+import { ensureBlobsEnvironment } from "./lib/blobsEnvironment";
 
 const methodNotAllowed = () => ({
   statusCode: 405,
@@ -9,6 +10,7 @@ const methodNotAllowed = () => ({
 });
 
 export const handler: Handler = async (event) => {
+  ensureBlobsEnvironment(event);
   if (event.httpMethod !== "GET" && event.httpMethod !== "POST") {
     return methodNotAllowed();
   }

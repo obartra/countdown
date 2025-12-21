@@ -7,6 +7,7 @@ import {
   type RateLimitStatus,
 } from "./lib/rateLimit";
 import { upsertReportIndexAfterReport } from "./lib/reportIndex";
+import { ensureBlobsEnvironment } from "./lib/blobsEnvironment";
 
 const REPORT_LIMITS = { hourly: 3, daily: 1000 };
 
@@ -64,6 +65,7 @@ const parseBody = (body: string | null): Record<string, unknown> | null => {
 };
 
 export const handler: Handler = async (event) => {
+  ensureBlobsEnvironment(event);
   if (event.httpMethod !== "POST") {
     return methodNotAllowed();
   }

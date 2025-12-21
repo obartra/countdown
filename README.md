@@ -51,6 +51,7 @@ CI runs `pnpm bundle:check` automatically after `pnpm build`.
 - `VITE_TENOR_CLIENT_KEY`, `VITE_IMAGE_API_KEY_TENOR` — Tenor image search
 - `VITE_OPENVERSE_BASE` — OpenVerse API base (for image search)
 - `COUNTDOWN_STORAGE_DIR` — Override local blob shim root (defaults to `/tmp/.netlify/published-data` in Netlify functions, `.netlify/published-data` when running tests locally)
+- `COUNTDOWN_STORAGE_DRIVER` — Optional override for storage (`fs` or `blobs`)
 
 ## API endpoints (Netlify functions)
 
@@ -99,4 +100,4 @@ npm run test:e2e   # requires free ports 4173/8889
 
 ## Deployment
 
-Build output lives in `dist/`. Netlify Functions reside in `netlify/functions/`. Set `ADMIN_SECRET` and image API keys in your deploy environment. The project uses a local blob shim at `.netlify/published-data` when running locally. Refer to design docs in `docs/design/` and PR briefs in `docs/pr/` for feature-specific details.
+Build output lives in `dist/`. Netlify Functions reside in `netlify/functions/`. Set `ADMIN_SECRET` and image API keys in your deploy environment. Production uses Netlify Blobs; local dev uses the `.netlify/published-data` shim. Refer to design docs in `docs/design/` and PR briefs in `docs/pr/` for feature-specific details.

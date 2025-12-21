@@ -86,14 +86,24 @@ class LocalStorageClient implements StorageClient {
 
   async listMeta() {
     await this.ensureReady();
-    const files = await listDirectory(META_DIR_SEGMENTS);
+    let files: string[];
+    try {
+      files = await listDirectory(META_DIR_SEGMENTS);
+    } catch (error) {
+      console.warn("Failed to list metadata directory", error);
+      return [];
+    }
     const metas: PublicationMeta[] = [];
     for (const file of files) {
       if (!file.endsWith(".json")) continue;
       const slug = file.replace(/\.json$/, "");
-      const meta = await this.readMeta(slug);
-      if (meta) {
-        metas.push(meta);
+      try {
+        const meta = await this.readMeta(slug);
+        if (meta) {
+          metas.push(meta);
+        }
+      } catch (error) {
+        console.warn(`Failed to read metadata for ${slug}`, error);
       }
     }
     return metas;

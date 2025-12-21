@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { useAdminAuth } from "./lib/useAdminAuth";
 
 type AdminStats = {
   totalActive: number;
@@ -19,21 +20,21 @@ type FetchState = {
 };
 
 const AdminPage: React.FC = () => {
-  const [secretInput, setSecretInput] = useState<string>(() => {
-    if (typeof window === "undefined") return "";
-    return window.sessionStorage.getItem("adminSecret") ?? "";
-  });
-  const [secret, setSecret] = useState<string>(() => {
-    if (typeof window === "undefined") return "";
-    return window.sessionStorage.getItem("adminSecret") ?? "";
-  });
+  const {
+    secret,
+    secretInput,
+    setSecretInput,
+    status: authStatus,
+    error: authError,
+    hasSecret,
+    verify: verifySecret,
+    clear: clearAuth,
+  } = useAdminAuth();
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [fetchState, setFetchState] = useState<FetchState>({
     loading: false,
     error: null,
   });
-
-  const hasSecret = secret.trim().length > 0;
 
   useEffect(() => {
     if (!hasSecret) return;
@@ -67,13 +68,9 @@ const AdminPage: React.FC = () => {
     loadStats().catch(() => {});
   }, [hasSecret, secret]);
 
-  const handleSubmitSecret = (event: React.FormEvent) => {
+  const handleSubmitSecret = async (event: React.FormEvent) => {
     event.preventDefault();
-    const trimmed = secretInput.trim();
-    setSecret(trimmed);
-    if (typeof window !== "undefined") {
-      window.sessionStorage.setItem("adminSecret", trimmed);
-    }
+    await verifySecret(secretInput);
   };
 
   const handleOpenStatsJson = async () => {
@@ -131,11 +128,15 @@ const AdminPage: React.FC = () => {
           autoComplete="current-password"
         />
       </label>
+      {authError ? (
+        <p className="text-sm text-destructive">{authError}</p>
+      ) : null}
       <button
         type="submit"
+        disabled={authStatus === "pending"}
         className="inline-flex items-center rounded-md bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground transition hover:opacity-90"
       >
-        Continue
+        {authStatus === "pending" ? "Verifying..." : "Continue"}
       </button>
     </form>
   );
@@ -152,12 +153,9 @@ const AdminPage: React.FC = () => {
   }, [stats]);
 
   const clearSecret = () => {
-    setSecret("");
-    setSecretInput("");
+    clearAuth();
     setStats(null);
-    if (typeof window !== "undefined") {
-      window.sessionStorage.removeItem("adminSecret");
-    }
+    setFetchState({ loading: false, error: null });
   };
 
   return (

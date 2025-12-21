@@ -51,8 +51,8 @@ describe("App", () => {
         exact: false,
       }),
     ).not.toBeVisible();
-    expect(document.body.style.backgroundColor).toBe("rgb(11, 16, 33)");
-    expect(document.body.style.color).toBe("rgb(242, 245, 255)");
+    expect(document.body.style.backgroundColor).toBe("rgb(17, 17, 19)");
+    expect(document.body.style.color).toBe("rgb(237, 238, 240)");
     expect(document.title).toBe("Countdown");
   });
 

@@ -4,7 +4,7 @@ import {
   hexToHslChannels,
   resolveThemeTokens,
 } from "./themeCssVars";
-import { themeMap } from "../themes";
+import { DEFAULT_THEME_KEY, themeMap } from "../themes";
 
 const hexToRgb = (hex: string) => {
   const cleaned = hex.trim().replace(/^#/, "");
@@ -56,17 +56,17 @@ describe("themeCssVars", () => {
   });
 
   it("uses catalog tokens when themeKey is provided", () => {
-    const midnight = themeMap.get("midnight");
-    expect(midnight).toBeTruthy();
+    const defaultTheme = themeMap.get(DEFAULT_THEME_KEY);
+    expect(defaultTheme).toBeTruthy();
 
     const resolved = resolveThemeTokens({
       backgroundColor: "#000000",
       textColor: "#ffffff",
-      themeKey: "midnight",
+      themeKey: DEFAULT_THEME_KEY,
     });
 
-    expect(resolved.surface).toBe(midnight!.surface);
-    expect(resolved.textSecondary).toBe(midnight!.textSecondary);
+    expect(resolved.surface).toBe(defaultTheme!.surface);
+    expect(resolved.textSecondary).toBe(defaultTheme!.textSecondary);
   });
 
   it("derives AA-readable surface + secondary text for custom colors", () => {
@@ -91,13 +91,15 @@ describe("themeCssVars", () => {
   });
 
   it("builds CSS variables that match the token colors", () => {
-    const midnight = themeMap.get("midnight")!;
-    const vars = createThemeCssVars(midnight);
+    const defaultTheme = themeMap.get(DEFAULT_THEME_KEY)!;
+    const vars = createThemeCssVars(defaultTheme);
 
-    expect(vars["--background"]).toBe(hexToHslChannels(midnight.background));
-    expect(vars["--card"]).toBe(hexToHslChannels(midnight.surface));
+    expect(vars["--background"]).toBe(
+      hexToHslChannels(defaultTheme.background),
+    );
+    expect(vars["--card"]).toBe(hexToHslChannels(defaultTheme.surface));
     expect(vars["--muted-foreground"]).toBe(
-      hexToHslChannels(midnight.textSecondary),
+      hexToHslChannels(defaultTheme.textSecondary),
     );
   });
 });

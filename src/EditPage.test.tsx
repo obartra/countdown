@@ -33,8 +33,8 @@ const resolveImageMock = vi.mocked(resolveImageImpl);
 const baseParams: CountdownParams = {
   rawTime: "",
   completeText: "Time is up!",
-  backgroundColor: "#0B1021",
-  textColor: "#F2F5FF",
+  backgroundColor: "#111113",
+  textColor: "#EDEEF0",
 };
 
 const mockResolvedOptions = (
@@ -223,7 +223,7 @@ describe("EditPage presets and readout", () => {
     render(<EditPage initialParams={params} />);
 
     expect(screen.getByTestId("theme-custom")).toBeInTheDocument();
-    fireEvent.click(screen.getByTestId("theme-midnight"));
+    fireEvent.click(screen.getByTestId("theme-graphite"));
 
     expect(screen.queryByTestId("theme-custom")).not.toBeInTheDocument();
     expect(window.location.search).not.toContain("bgcolor=");

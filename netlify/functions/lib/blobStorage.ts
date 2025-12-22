@@ -15,11 +15,47 @@ const USE_NETLIFY_BLOBS =
       : process.env.NETLIFY === "true" && process.env.NETLIFY_DEV !== "true";
 let blobStorePromise: Promise<any> | null = null;
 
+const hasBlobsContext = () =>
+  Boolean(
+    process.env.NETLIFY_BLOBS_CONTEXT ||
+    (globalThis as { netlifyBlobsContext?: unknown }).netlifyBlobsContext,
+  );
+
+const getManualStoreOptions = () => {
+  const siteID =
+    process.env.COUNTDOWN_BLOBS_SITE_ID ||
+    process.env.NETLIFY_SITE_ID ||
+    process.env.SITE_ID;
+  const token =
+    process.env.COUNTDOWN_BLOBS_TOKEN ||
+    process.env.NETLIFY_BLOBS_TOKEN ||
+    process.env.NETLIFY_API_TOKEN ||
+    process.env.NETLIFY_AUTH_TOKEN;
+  if (!siteID || !token) return null;
+  const apiURL =
+    process.env.COUNTDOWN_BLOBS_API_URL || process.env.NETLIFY_API_URL;
+  return {
+    name: BLOB_STORE_NAME,
+    siteID,
+    token,
+    apiURL,
+  };
+};
+
 const getBlobStore = async () => {
   if (!blobStorePromise) {
-    blobStorePromise = import("@netlify/blobs").then(({ getStore }) =>
-      getStore(BLOB_STORE_NAME),
-    );
+    blobStorePromise = import("@netlify/blobs").then(({ getStore }) => {
+      const manualOptions = getManualStoreOptions();
+      if (manualOptions) {
+        return getStore(manualOptions);
+      }
+      if (!hasBlobsContext()) {
+        throw new Error(
+          "Netlify Blobs context missing. Set COUNTDOWN_BLOBS_SITE_ID and COUNTDOWN_BLOBS_TOKEN or enable Blobs context.",
+        );
+      }
+      return getStore(BLOB_STORE_NAME);
+    });
   }
   return blobStorePromise;
 };

@@ -10,6 +10,7 @@ Netlify Functions. Published slugs and admin stats disappear between invocations
 - Allow an override via `COUNTDOWN_STORAGE_DRIVER=fs|blobs`.
 - Store all blob keys under a single Netlify Blobs store.
 - Initialize Netlify Blobs context in Lambda compatibility mode using the function event.
+- Allow manual Blobs configuration via `COUNTDOWN_BLOBS_SITE_ID` and `COUNTDOWN_BLOBS_TOKEN` if the environment context is unavailable.
 
 ### Test plan
 - `pnpm test`

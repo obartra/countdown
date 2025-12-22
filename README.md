@@ -52,6 +52,9 @@ CI runs `pnpm bundle:check` automatically after `pnpm build`.
 - `VITE_OPENVERSE_BASE` — OpenVerse API base (for image search)
 - `COUNTDOWN_STORAGE_DIR` — Override local blob shim root (defaults to `/tmp/.netlify/published-data` in Netlify functions, `.netlify/published-data` when running tests locally)
 - `COUNTDOWN_STORAGE_DRIVER` — Optional override for storage (`fs` or `blobs`)
+- `COUNTDOWN_BLOBS_SITE_ID` — Netlify site ID for manual Blobs configuration
+- `COUNTDOWN_BLOBS_TOKEN` — Netlify API token for manual Blobs configuration
+- `COUNTDOWN_BLOBS_API_URL` — Optional Netlify API base URL override
 
 ## API endpoints (Netlify functions)
 
